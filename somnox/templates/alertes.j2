@@ -1,0 +1,13 @@
+POINTS D'ALERTE DU DOSSIER — {{ patient }} ({{ date_examen }})
+
+Sévérité retenue : {{ severite }} (IAH {{ iah }}/h)
+
+{% for a in alertes %}
+[{{ a.niveau|upper }}] {{ a.titre }}
+  {{ a.texte }}
+{% else %}
+Aucun point d'alerte majeur détecté sur les données extractibles.
+{% endfor %}
+{% if donnees_manquantes %}
+Données manquantes à contrôler : {{ donnees_manquantes|join(', ') }}
+{% endif %}

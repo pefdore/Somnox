@@ -1,0 +1,24 @@
+Cher Confrère,
+
+Je vous informe des résultats de la polygraphie ventilatoire réalisée chez votre patient(e) {{ patient }} le {{ date_examen }}.
+
+RÉSULTATS PRINCIPAUX
+- Indice d'apnées-hypopnées : {{ iah }}/h
+- Index de désaturation : {{ odi }}/h ; SpO2 minimale : {{ spo2_min }} %
+- Temps passé sous 90 % de saturation : {{ t90 }} %
+
+INTERPRÉTATION
+{{ conclusion }}
+{{ fiabilite }}
+
+CONDUITE À TENIR
+{% for r in recommandations %}
+- {{ r }}
+{% endfor %}
+
+Je reste à votre disposition pour tout complément et assure le suivi dans le cadre de la consultation de médecine du sommeil.
+
+Je vous prie d'agréer, Cher Confrère, l'expression de mes salutations distinguées.
+
+Dr {{ medecin }}
+Médecin généraliste — Consultation de médecine du sommeil

@@ -1,0 +1,26 @@
+MÉMO PRATICIEN — {{ patient }} ({{ date_examen }})
+
+SÉVÉRITÉ (SFARS/SFRMS) : {{ severite }}
+IAH {{ iah }}/h | ODI {{ odi }}/h | SpO2 min {{ spo2_min }} % | T90 {{ t90 }} % | MA {{ micro }}/h | PLM {{ plm }}/h
+
+Fiabilité : {{ fiabilite }}
+{% if donnees_manquantes %}
+Données non extractibles : {{ donnees_manquantes|join(', ') }} — à vérifier sur le PDF source.
+{% endif %}
+
+INTERPRÉTATION (recommandations françaises)
+{% for item in interpretation %}
+- {{ item }}
+{% endfor %}
+
+ALERTES
+{% for a in alertes %}
+- [{{ a.niveau|upper }}] {{ a.titre }} : {{ a.texte }}
+{% else %}
+- Aucune alerte majeure détectée.
+{% endfor %}
+
+CONDUITE À TENIR
+{% for r in recommandations %}
+- {{ r }}
+{% endfor %}

@@ -1,0 +1,41 @@
+Rapport d'enregistrement — Polygraphie ventilatoire
+Patient : DUPONT Jean
+Date d'examen : 12/03/2025
+
+Données démographiques
+Poids : 92 kg
+Taille : 174
+IMC : 30,4
+Score d'Epworth : 14
+
+Paramètres d'enregistrement
+Durée d'enregistrement : 465 min
+Durée d'analyse : 432 min
+
+Événements respiratoires
+Apnées obstructives : 152
+Apnées centrales : 8
+Hypopnées : 188
+Désaturations : 310
+
+Indices
+IAH : 47,3
+IA : 18,5
+IH : 28,8
+Index de désaturation : 43,1
+IAH décubitus dorsal : 62,1
+IAH latéral : 21,4
+IAH REM : 55,0
+
+Oxygénation
+SpO2 moyenne : 91,2
+SpO2 minimale : 74
+Temps passé sous 90 % : 18,6
+
+Autres paramètres
+Index de micro-éveils : 32,4
+Index PLM : 21,5
+Ronflement : 46,2 %
+Décubitus dorsal : 38 %
+Fréquence cardiaque moyenne : 76
+Fréquence cardiaque maximale : 128

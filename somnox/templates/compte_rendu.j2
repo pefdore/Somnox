@@ -1,0 +1,36 @@
+{{ patient }} — Polygraphie ventilatoire du {{ date_examen }}
+
+SÉVÉRITÉ : {{ severite }}
+CONCLUSION : {{ conclusion }}
+
+1. CONTEXTE
+IMC : {{ imc }} kg/m² — Epworth : {{ epworth }}/24
+Durée d'enregistrement : {{ duree }} min (analyse : {{ analyse }} min) — {{ fiabilite }}
+
+2. PARAMÈTRES RESPIRATOIRES
+- IAH : {{ iah }}/h (apnées : {{ ia }}/h ; hypopnées : {{ ih }}/h)
+- Index de désaturation : {{ odi }}/h
+- IAH dorsal : {{ iah_dorsal }}/h ; IAH latéral : {{ iah_lateral }}/h ; IAH REM : {{ iah_rem }}/h
+- Ronflement : {{ ronflement }} % ; position dorsale : {{ dorsal }} %
+
+3. OXYGÉNATION
+- SpO2 moyenne : {{ spo2_moy }} % ; minimale : {{ spo2_min }} % ; temps < 90 % : {{ t90 }} %
+
+4. AUTRES PARAMÈTRES
+- Index de micro-éveils : {{ micro }}/h ; index PLM : {{ plm }}/h
+- FC moyenne/maximale : {{ fc_moy }}/{{ fc_max }} bpm
+
+5. ANALYSE ET INTERPRÉTATION
+{% for item in interpretation %}
+- {{ item }}
+{% endfor %}
+
+6. POINTS D'ALERTE
+{% for a in alertes %}
+- [{{ a.niveau|upper }}] {{ a.titre }} : {{ a.texte }}
+{% endfor %}
+
+7. CONDUITE À TENIR
+{% for r in recommandations %}
+- {{ r }}
+{% endfor %}
