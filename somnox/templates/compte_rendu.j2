@@ -1,36 +1,27 @@
-{{ patient }} — Polygraphie ventilatoire du {{ date_examen }}
+Conclusion de la polygraphie ventilatoire — {{ patient }} ({{ date_examen }})
 
-SÉVÉRITÉ : {{ severite }}
-CONCLUSION : {{ conclusion }}
+SAHOS {{ severite }} (IAH {{ iah }}/h), prédominance {{ predominance }} (IAHo {{ iaho }}/h, IAHc {{ iahc }}/h). {{ dependance_positionnelle }}
 
-1. CONTEXTE
-IMC : {{ imc }} kg/m² — Epworth : {{ epworth }}/24
-Durée d'enregistrement : {{ duree }} min (analyse : {{ analyse }} min) — {{ fiabilite }}
+Le profil oxymétrique montre une hypoxémie {{ grade_hypoxemie }} (SpO2 moyenne {{ spo2_moy }} %, temps passé avec une SpO2 sous les 90 % : {{ t90_min }} min représentant {{ t90 }} % de la nuit, charge hypoxique {{ charge_hypoxique }} %min/h).
 
-2. PARAMÈTRES RESPIRATOIRES
-- IAH : {{ iah }}/h (apnées : {{ ia }}/h ; hypopnées : {{ ih }}/h)
-- Index de désaturation : {{ odi }}/h
-- IAH dorsal : {{ iah_dorsal }}/h ; IAH latéral : {{ iah_lateral }}/h ; IAH REM : {{ iah_rem }}/h
-- Ronflement : {{ ronflement }} % ; position dorsale : {{ dorsal }} %
+Ronflements {{ intensite_ronflement }} ({{ ronflement }} % de la nuit, {{ dbc_moy }} dBc en moyenne et {{ dbc_max }} dBc au maximum).
 
-3. OXYGÉNATION
-- SpO2 moyenne : {{ spo2_moy }} % ; minimale : {{ spo2_min }} % ; temps < 90 % : {{ t90 }} %
+Symptômes évocateurs : {{ symptomes }}.
 
-4. AUTRES PARAMÈTRES
-- Index de micro-éveils : {{ micro }}/h ; index PLM : {{ plm }}/h
-- FC moyenne/maximale : {{ fc_moy }}/{{ fc_max }} bpm
-
-5. ANALYSE ET INTERPRÉTATION
-{% for item in interpretation %}
-- {{ item }}
+Particularités :
+{{ particularites }}
+Propositions thérapeutiques :
+- {{ proposition }}
+{% for m in mesures %}
+- {{ m }}
 {% endfor %}
+Bilan complémentaire si besoin : recherche de comorbidités (HTA, diabète, syndrome métabolique), évaluation cardiovasculaire (risque accru d'ACFA, AVC).
 
-6. POINTS D'ALERTE
-{% for a in alertes %}
-- [{{ a.niveau|upper }}] {{ a.titre }} : {{ a.texte }}
+Suivi :
+{% for s in suivi %}
+- {{ s }}
 {% endfor %}
+{% if rappel_arrete %}
 
-7. CONDUITE À TENIR
-{% for r in recommandations %}
-- {{ r }}
-{% endfor %}
+{{ rappel_arrete }}
+{% endif %}

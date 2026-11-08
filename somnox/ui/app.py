@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from .. import watcher
 from ..analysis import AnalysisResult, analyse
 from ..generate import DOCS, generate_all
-from ..models import PolygraphData
+from ..models import COMORBIDITES_UI, SYMPTOMES_UI, ClinicalContext, PolygraphData
 from ..parser import parse_pdf
 
 THEME = Path(__file__).parent.parent / "theme.qss"
@@ -40,6 +40,7 @@ class MainWindow(QMainWindow):
         self.result: AnalysisResult | None = None
         self.observer = None
         self._build_ui()
+        self._build_context_inputs()
         if watch_dir:
             self._start_watch(watch_dir)
 
@@ -94,6 +95,53 @@ class MainWindow(QMainWindow):
         self.status.showMessage("Prêt — aucun examen chargé.")
         self.setCentralWidget(root)
 
+    def _build_context_inputs(self):
+        """Panneau de contexte clinique : symptômes, comorbidités, BOSS, Epworth."""
+        from PySide6.QtWidgets import QCheckBox, QGroupBox, QSpinBox
+
+        self.ctx_group = QGroupBox("Contexte clinique (absent du PDF)")
+        grid = QHBoxLayout(self.ctx_group)
+
+        sympt_box = QVBoxLayout()
+        self.chk_sympt = {}
+        for key, label in SYMPTOMES_UI.items():
+            cb = QCheckBox(label)
+            self.chk_sympt[key] = cb
+            sympt_box.addWidget(cb)
+
+        comorb_box = QVBoxLayout()
+        self.chk_comorb = {}
+        for label in COMORBIDITES_UI:
+            cb = QCheckBox(label)
+            self.chk_comorb[label] = cb
+            comorb_box.addWidget(cb)
+
+        scores = QVBoxLayout()
+        self.spin_epworth = QSpinBox(); self.spin_epworth.setRange(0, 24); self.spin_epworth.setSpecialValueText("Epworth —")
+        self.spin_boss = QSpinBox(); self.spin_boss.setRange(0, 10); self.spin_boss.setSpecialValueText("BOSS —")
+        self.spin_pichot = QSpinBox(); self.spin_pichot.setRange(0, 40); self.spin_pichot.setSpecialValueText("Pichot —")
+        self.chk_refus_ppc = QCheckBox("Refus de la PPC")
+        for w in (self.spin_epworth, self.spin_boss, self.spin_pichot, self.chk_refus_ppc):
+            scores.addWidget(w)
+
+        grid.addLayout(sympt_box)
+        grid.addLayout(comorb_box)
+        grid.addLayout(scores)
+        self.centralWidget().layout().insertWidget(2, self.ctx_group)
+
+    def _current_context(self) -> ClinicalContext:
+        epworth = self.spin_epworth.value() if self.spin_epworth.value() > 0 else None
+        boss = self.spin_boss.value() if self.spin_boss.value() > 0 else None
+        pichot = self.spin_pichot.value() if self.spin_pichot.value() > 0 else None
+        return ClinicalContext(
+            epworth=epworth,
+            boss=boss,
+            pichot=pichot,
+            comorbidites=[k for k, cb in self.chk_comorb.items() if cb.isChecked()],
+            refus_ppc=self.chk_refus_ppc.isChecked(),
+            **{k: cb.isChecked() for k, cb in self.chk_sympt.items()},
+        )
+
     # ---------------------------------------------------------------- actions
 
     def _import_pdf(self):
@@ -105,7 +153,11 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"Lecture : {Path(path).name} …")
         try:
             self.data = parse_pdf(path)
-            self.result = analyse(self.data)
+            if self.data.epworth is not None:
+                self.spin_epworth.setValue(self.data.epworth)
+            if self.data.pichot is not None:
+                self.spin_pichot.setValue(self.data.pichot)
+            self.result = analyse(self.data, self._current_context())
             self._display()
         except Exception as exc:
             QMessageBox.critical(self, "Erreur", f"Échec de l'import :\n{exc}")
@@ -135,7 +187,7 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Dossier d'export")
         if not folder:
             return
-        outputs = generate_all(self.data, self.result, folder)
+        outputs = generate_all(self.data, self.result, folder, self._current_context())
         self.status.showMessage(f"Documents générés dans {folder}")
         QMessageBox.information(
             self, "Export", "\n".join(p["docx"] for p in outputs.values())
@@ -147,12 +199,13 @@ class MainWindow(QMainWindow):
         from ..generate import render
 
         assert self.data and self.result
+        self.result = analyse(self.data, self._current_context())
         self.severity.setText(self.result.severite)
         self.severity.setProperty("sev", self.result.severite)
         self.severity.style().unpolish(self.severity)
         self.severity.style().polish(self.severity)
         for doc in DOCS:
-            self.editors[doc].setPlainText(render(doc, self.data, self.result))
+            self.editors[doc].setPlainText(render(doc, self.data, self.result, self._current_context()))
         self.status.showMessage(
             f"Examen chargé ({self.data.methode_extraction}) — {self.data.patient or 'patient inconnu'}"
         )

@@ -79,6 +79,8 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
         text,
     )
     data.iah_rem = _first([rf"IAH\s*(?:en\s*)?REM[^0-9\n]*{_NUM}", rf"AHI\s*REM[^0-9\n]*{_NUM}"], text)
+    data.iahc = _first([rf"IAH\s*central[^0-9\n]*{_NUM}", rf"IAHc\b[^0-9\n]*{_NUM}", rf"Index\s+d['’]apn(?:ées|ée)\s+centrales[^0-9\n]*{_NUM}"], text)
+    data.iaho = _first([rf"IAH\s*obstructif[^0-9\n]*{_NUM}", rf"IAHo\b[^0-9\n]*{_NUM}", rf"Index\s+d['’]apn(?:ées|ée)\s+obstructives[^0-9\n]*{_NUM}"], text)
     data.iah_dorsal = _first([rf"IAH\s+décubitus\s*dorsal[^0-9\n]*{_NUM}", rf"IAH\s*dorsal[^0-9\n]*{_NUM}", rf"AHI\s*supine[^0-9\n]*{_NUM}"], text)
     data.iah_latéral = _first([rf"IAH\s*(?:décubitus\s*)?latéral[^0-9\n]*{_NUM}", rf"AHI\s*lat(?:eral|éral)?[^0-9\n]*{_NUM}"], text)
 
@@ -94,6 +96,11 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
         ],
         text,
     )
+    m = re.search(r"Temps\s+passé\s+sous\s*90\s*%\D*?([0-9]{1,4})\s*min", text, re.IGNORECASE)
+    data.t90_min = _f(m.group(1)) if m else None
+    data.charge_hypoxique = _first([rf"Charge\s+hypoxique[^0-9\n]*{_NUM}"], text)
+    m = re.search(r"SpO2?\s*(?:min(?:imale)?\s*)?(?:en\s*)?REM[^0-9\n]*(\d{2,3})", text, re.IGNORECASE)
+    data.spo2_min_rem = _f(m.group(1)) if m else None
 
     data.index_micro_eveils = _first(
         [
@@ -124,6 +131,11 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
     )
 
     data.ronflement_pct = _first([rf"Ronflement[^0-9\n]*{_NUM}\s*%", rf"Snoring[^0-9\n]*{_NUM}\s*%"], text)
+    data.ronflement_dbc_moy = _first([rf"Ronflement[^0-9\n]*moyen[^0-9\n]*({_NUM})\s*dBc?", rf"Snoring[^0-9\n]*mean[^0-9\n]*({_NUM})\s*dB"], text)
+    data.ronflement_dbc_max = _first([rf"Ronflement[^0-9\n]*max(?:imal|imum)?[^0-9\n]*({_NUM})\s*dBc?", rf"Snoring[^0-9\n]*max[^0-9\n]*({_NUM})\s*dB"], text)
+    data.activations_autonomiques = _first([rf"Activations?\s+autonomiques?[^0-9\n]*{_NUM}", rf"Autonomic\s+activation[^0-9\n]*{_NUM}"], text)
+    m = re.search(r"(?:Durée|Temps)\s+d['’](?:éveil|eveil)[^0-9\n]*([0-9]{1,3})\s*min", text, re.IGNORECASE)
+    data.temps_eveil_min = _f(m.group(1)) if m else None
     data.position_dorsale_pct = _first([rf"Décubitus\s+dorsal[^0-9\n]*{_NUM}\s*%", rf"\bSupine\b[^0-9\n]*{_NUM}\s*%", rf"Position\s+dorsale[^0-9\n]*{_NUM}\s*%"], text)
 
     m = re.search(r"Fréquence\s+cardiaque\s+moyenne[^0-9\n]*(\d{2,3})", text, re.IGNORECASE)
@@ -139,6 +151,8 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
     data.taille = _f(m.group(1)) if m else None
     m = re.search(r"Epworth[^0-9\n]*(\d{1,2})", text, re.IGNORECASE)
     data.epworth = int(_f(m.group(1))) if m else None
+    m = re.search(r"Pichot[^0-9\n]*(\d{1,2})", text, re.IGNORECASE)
+    data.pichot = int(_f(m.group(1))) if m else None
 
     for key, pat in {
         "apnées obstructives": r"Apnées\s+obstructives[^0-9\n]*(\d{1,4})",

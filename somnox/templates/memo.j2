@@ -1,26 +1,41 @@
 MÉMO PRATICIEN — {{ patient }} ({{ date_examen }})
 
-SÉVÉRITÉ (SFARS/SFRMS) : {{ severite }}
-IAH {{ iah }}/h | ODI {{ odi }}/h | SpO2 min {{ spo2_min }} % | T90 {{ t90 }} % | MA {{ micro }}/h | PLM {{ plm }}/h
-
+SÉVÉRITÉ (SFARS/SFRMS) : {{ severite }} (IAH {{ iah }}/h)
 Fiabilité : {{ fiabilite }}
 {% if donnees_manquantes %}
 Données non extractibles : {{ donnees_manquantes|join(', ') }} — à vérifier sur le PDF source.
 {% endif %}
 
-INTERPRÉTATION (recommandations françaises)
-{% for item in interpretation %}
-- {{ item }}
+PROPOSITION (conditions de remboursement)
+{{ proposition }}
+
+CE QUE VOUS AURIEZ PU OUBLIER — POINTS DE VIGILANCE
+
+Immédiat :
+{% for v in vigilance_immédiat %}
+- {{ v }}
+{% else %}
+- Rien de notable.
 {% endfor %}
 
-ALERTES
+À terme :
+{% for v in vigilance_terme %}
+- {{ v }}
+{% else %}
+- Rien de notable.
+{% endfor %}
+
+ALERTES DU DOSSIER
 {% for a in alertes %}
 - [{{ a.niveau|upper }}] {{ a.titre }} : {{ a.texte }}
 {% else %}
 - Aucune alerte majeure détectée.
 {% endfor %}
 
-CONDUITE À TENIR
-{% for r in recommandations %}
-- {{ r }}
+INTERPRÉTATION (recommandations françaises)
+{% for item in interpretation %}
+- {{ item }}
 {% endfor %}
+
+RAPPEL CONDUITE (arrêté du 28 mars 2022) :
+{% if rappel_arrete %}{{ rappel_arrete }}{% else %}Non applicable (SAHOS non retenu ou données cliniques incomplètes — vérifier Epworth/BOSS).{% endif %}

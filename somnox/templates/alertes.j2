@@ -8,6 +8,13 @@ Sévérité retenue : {{ severite }} (IAH {{ iah }}/h)
 {% else %}
 Aucun point d'alerte majeur détecté sur les données extractibles.
 {% endfor %}
+{% if vigilance_immédiat %}
+
+À contrôler avant validation :
+{% for v in vigilance_immédiat %}
+- {{ v }}
+{% endfor %}
+{% endif %}
 {% if donnees_manquantes %}
 Données manquantes à contrôler : {{ donnees_manquantes|join(', ') }}
 {% endif %}

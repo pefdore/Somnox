@@ -3,19 +3,58 @@
 Références principales :
 - SFARS/SFRMS : cotation et interprétation de la polygraphie ventilatoire
   (seuils IAH 5/15/30 par heure, limites d'analyse sans EEG).
-- HAS, guide-parcours « Syndrome d'apnées obstructives du sommeil » (2023) :
-  démarche diagnostique, critères de gravité, orientation.
+- HAS, guide-parcours « Syndrome d'apnées obstructives du sommeil » (2023).
+- Conditions de prise en charge PPC / OAM : IAH ≥ 15/h AVEC comorbidités,
+  ou IAH ≥ 30/h (± comorbidités) pour la PPC ; OAM si IAH ≥ 15/h SANS
+  comorbidités (ou refus de la PPC).
+- Arrêté révisé du 28 mars 2022 : SAHOS + somnolence et conduite automobile.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .models import PolygraphData
+from .models import ClinicalContext, PolygraphData, default_context
 
 SEUIL_LEGERS = 5.0
 SEUIL_MODERES = 15.0
 SEUIL_SEVERES = 30.0
+
+COMORBIDITES_CONNUES = (
+    "HTA",
+    "diabète",
+    "syndrome métabolique",
+    "insuffisance cardiaque",
+    "ACFA",
+    "AVC/AIT",
+    "coronaropathie",
+)
+
+ARRETE_SOMNOLENCE = (
+    "Le patient est notifié de l'arrêté révisé du 28 mars 2022, qui met le SAHOS, "
+    "dans un contexte de somnolence, sur la liste des incapacités physiques "
+    "incompatibles avec l'obtention ou le maintien du permis de conduire, de la "
+    "nécessité de se signaler à la commission départementale des permis de conduire "
+    "ou à un médecin agréé, de sa propre initiative, pour valider son permis de "
+    "conduire. La reprise de la conduite n'est possible qu'après une réévaluation "
+    "clinique au minimum après un mois de traitement efficace et, selon l'arrêté de "
+    "mars 2022, après la réalisation d'un Test de Maintien d'Éveil (TME) pour le "
+    "groupe léger (tous les 3 ans) et le groupe lourd (tous les ans)."
+)
+
+ARRETE_RAPPEL = (
+    "Le patient n'a pas de somnolence (Epworth à {epworth}) et le risque "
+    "accidentogène est jugé faible (BOSS à {boss}), ceci étant je rappelle de façon "
+    "systématique que l'arrêté révisé du 28 mars 2022 met le SAHOS, lorsqu'il est "
+    "couplé à une somnolence, sur la liste des incapacités physiques incompatibles "
+    "avec l'obtention ou le maintien du permis de conduire, de la nécessité de se "
+    "signaler à la commission départementale des permis de conduire ou à un médecin "
+    "agréé, de sa propre initiative, pour valider son permis de conduire. La reprise "
+    "de la conduite n'est possible qu'après une réévaluation clinique au minimum "
+    "après un mois de traitement efficace et, selon l'arrêté de mars 2022, après la "
+    "réalisation d'un Test de Maintien d'Éveil (TME) pour le groupe léger (tous les "
+    "3 ans) et le groupe lourd (tous les ans)."
+)
 
 
 @dataclass
@@ -34,6 +73,11 @@ class AnalysisResult:
     recommandations: list[str] = field(default_factory=list)
     fiabilite: str = ""
     donnees_manquantes: list[str] = field(default_factory=list)
+    proposition_therapeutique: str = ""
+    mesures_associees: list[str] = field(default_factory=list)
+    suivi: list[str] = field(default_factory=list)
+    rappel_arrete: str = ""
+    vigilance: list[dict] = field(default_factory=list)
 
 
 class Gravite:
@@ -60,7 +104,121 @@ def _fiabilite(data: PolygraphData) -> tuple[str, list[str]]:
     return "Enregistrement de durée satisfaisante (≥ 4 h d'analyse).", manquantes
 
 
-def analyse(data: PolygraphData) -> AnalysisResult:
+def _proposition(data: PolygraphData, ctx: ClinicalContext) -> str:
+    iah = data.iah
+    if iah is None:
+        return "IAH non disponible : pas de proposition thérapeutique possible avant contrôle du document."
+    comorb = bool(ctx.comorbidites)
+    if iah >= SEUIL_SEVERES:
+        return (
+            "Indication au remboursement de la PPC : IAH ≥ 30/h (prise en charge due "
+            "avec ou sans comorbidités)."
+        )
+    if iah >= SEUIL_MODERES:
+        if ctx.refus_ppc:
+            return (
+                "Indication au remboursement d'une OAM : IAH entre 15 et 30/h, le "
+                "patient refusant la PPC."
+            )
+        if comorb:
+            return (
+                "Indication au remboursement de la PPC : IAH entre 15 et 30/h associé à "
+                f"des comorbidités ({', '.join(ctx.comorbidites)})."
+            )
+        return (
+            "Indication au remboursement d'une OAM : IAH entre 15 et 30/h sans "
+            "comorbidité (la PPC n'est pas prise en charge dans cette configuration)."
+        )
+    if iah >= SEUIL_LEGERS:
+        return (
+            "Pas d'indication de remboursement d'une PPC ni d'une OAM (IAH < 15/h) : "
+            "mesures hygiéno-diététiques, contrôle clinique et polygraphique à "
+            "reconsidérer si aggravation symptomatique."
+        )
+    return "Pas d'indication de PPC ni d'OAM (IAH < 5/h)."
+
+
+def _mesures_associees(data: PolygraphData, ctx: ClinicalContext) -> list[str]:
+    mesures = []
+    if (
+        data.iah_dorsal is not None
+        and data.iah_latéral is not None
+        and data.iah_latéral > 0
+        and data.iah_dorsal / data.iah_latéral >= 2
+    ):
+        mesures.append(
+            "Caractère positionnel net : proposer un dispositif anti-dorsal."
+        )
+    if data.imc is not None and data.imc >= 25:
+        mesures.append(
+            f"Perte de poids {'impérative' if data.imc >= 30 else 'souhaitable'} "
+            f"(IMC {data.imc:g}) : régime hypocalorique + activité physique "
+            "(équipe mobile diététique / Activité Physique Adaptée du CH La Guerche "
+            "de Bretagne). Une perte de 5 % du poids correspond généralement à une "
+            "diminution d'environ 30 % de l'IAH."
+        )
+    mesures.append(
+        "Éviter alcool et sédatifs le soir, qui majorent le risque d'apnées."
+    )
+    return mesures
+
+
+def _suivi(data: PolygraphData, ctx: ClinicalContext, proposition: str) -> list[str]:
+    suivi = []
+    if "OAM" in proposition:
+        suivi.append("Contrôle sous OAM à 4 mois (efficacité, tolérance, calage dentaire).")
+    if "PPC" in proposition:
+        suivi.append("Consultation à 4 mois si mise en place de la PPC (observance, effets résiduels).")
+    if ctx.somnolence_positive and (data.iah or 0) < SEUIL_MODERES:
+        suivi.append(
+            "Polysomnographie si somnolence sévère non expliquée par la polygraphie."
+        )
+    if (data.iah or 0) < SEUIL_MODERES:
+        suivi.append(
+            "Pas de rendez-vous systématique mais reste à la disposition du patient, "
+            "en particulier en cas d'aggravation des symptômes (nycturie, somnolence, "
+            "asthénie marquée, ronflements sévères, céphalées matinales)."
+        )
+    return suivi
+
+
+def _rappel_arrete(data: PolygraphData, ctx: ClinicalContext, sah_os: bool) -> str:
+    if not sah_os:
+        return ""
+    if ctx.somnolence_positive or ctx.risque_accidentogene:
+        return ARRETE_SOMNOLENCE
+    if ctx.epworth is not None and ctx.epworth < 10 and ctx.boss is not None and ctx.boss < 3:
+        return ARRETE_RAPPEL.format(epworth=ctx.epworth, boss=ctx.boss)
+    return ""
+
+
+def _vigilance(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResult) -> list[dict]:
+    items = []
+    if ctx.boss is None:
+        items.append({"horizon": "immédiat", "texte": "Score de BOSS non renseigné : risque accidentogène non évalué — à compléter avant l'arrêté de conduite."})
+    if not ctx.comorbidites:
+        items.append({"horizon": "immédiat", "texte": "Comorbidités non renseignées : leur présence conditionne le remboursement de la PPC (IAH 15-30/h). Vérifier HTA, diabète, syndrome métabolique, ACFA, AVC/AIT, coronaropathie."})
+    if ctx.epworth is None and data.epworth is None:
+        items.append({"horizon": "immédiat", "texte": "Epworth non disponible : somnolence diurne non documentée."})
+    centrales = data.evenements_respiratoires.get("apnées centrales")
+    total = sum(data.evenements_respiratoires.values())
+    if centrales is not None and total > 0 and centrales / total >= 0.5 and (data.iah or 0) >= 5:
+        items.append({"horizon": "immédiat", "texte": "Prédominance d'événements centraux : envisager une polysomnographie et rechercher une insuffisance cardiaque avant toute PPC (risque d'apnées sous PPC)."})
+    if data.index_plm is not None and data.index_plm >= 15:
+        items.append({"horizon": "immédiat", "texte": "Index PLM ≥ 15/h : corréler à un syndrome des jambes sans repos ; ferritinémie à discuter."})
+    if ctx.nycturie:
+        items.append({"horizon": "à terme", "texte": "Nycturie déclarée : rechercher un retentissement vésical/prostatique et réévaluer sous traitement."})
+    if data.imc is not None and data.imc >= 30:
+        items.append({"horizon": "à terme", "texte": "Obésité : suivi pondéral structuré ; le contrôle du poids conditionne l'évolution de l'IAH."})
+    if (data.iah or 0) >= 5:
+        items.append({"horizon": "à terme", "texte": "Évaluation cardiovasculaire : risque accru d'ACFA et d'AVC ; dépistage HTA et troubles du métabolisme glucidique."})
+    if res.fiabilite.startswith("Enregistrement insuffisant"):
+        items.append({"horizon": "immédiat", "texte": "Enregistrement < 4 h : polygraphie non concluante, à répéter (ou polysomnographie) avant conclusion définitive."})
+    return items
+
+
+def analyse(data: PolygraphData, ctx: ClinicalContext | None = None) -> AnalysisResult:
+    ctx = ctx or default_context(data)
     res = AnalysisResult()
     res.fiabilite, res.donnees_manquantes = _fiabilite(data)
     iah = data.iah
@@ -71,9 +229,7 @@ def analyse(data: PolygraphData) -> AnalysisResult:
             "IAH non extractible du document. Vérifier l'import (PDF natif ou OCR) "
             "avant toute interprétation."
         )
-        res.recommandations.append(
-            "Contrôler manuellement le document source ou refaire une saisie assistée."
-        )
+        res.recommandations.append("Contrôler manuellement le document source ou refaire une saisie assistée.")
         return res
 
     if iah < SEUIL_LEGERS:
@@ -92,13 +248,13 @@ def analyse(data: PolygraphData) -> AnalysisResult:
     if iah >= SEUIL_LEGERS:
         res.interpretation.append(
             "Le diagnostic de SAHOS sur polygraphie exige un IAH ≥ 5/h associé à une "
-            "symptomatologie évocatrice (somnolence diurne, ronflements, apnées constatées, "
-            "comorbidités) — HAS 2023."
+            "symptomatologie évocatrice (somnolence diurne, ronflements, apnées "
+            "constatées, comorbidités) — HAS 2023."
         )
         res.interpretation.append(
-            "En l'absence d'EEC, la polygraphie sous-estime l'IAH par rapport à la "
-            "polysomnographie (index d'éveils non mesuré) : un résultat limite ne permet "
-            "pas d'exclure le diagnostic (SFARS/SFRMS)."
+            "En l'absence d'EEG, la polygraphie sous-estime l'IAH par rapport à la "
+            "polysomnographie (fragmentation non mesurée) : un résultat limite ne "
+            "permet pas d'exclure le diagnostic (SFARS/SFRMS)."
         )
 
     if data.index_desat is not None:
@@ -111,7 +267,6 @@ def analyse(data: PolygraphData) -> AnalysisResult:
         res.interpretation.append(
             f"IAH en REM à {data.iah_rem:.1f}/h : SAHOS positionnel/REM à considérer malgré un IAH global peu élevé."
         )
-
     if (
         data.iah_dorsal is not None
         and data.iah_latéral is not None
@@ -119,73 +274,27 @@ def analyse(data: PolygraphData) -> AnalysisResult:
         and data.iah_dorsal / data.iah_latéral >= 2
     ):
         res.interpretation.append(
-            "Ratio dorsal/latéral ≥ 2 : composante positionnelle significative, à prendre en "
-            "compte dans la stratégie thérapeutique (rééducation posturale en complément)."
+            "Ratio dorsal/latéral ≥ 2 : composante positionnelle significative."
         )
 
     # Alertes
     if data.spo2_minimale is not None and data.spo2_minimale < 80:
-        res.alertes.append(
-            Alerte("critique", "Désaturation profonde",
-                   f"SpO2 minimale à {data.spo2_minimale:.0f} % (< 80 %) : risque d'hypoxémie sévère.")
-        )
+        res.alertes.append(Alerte("critique", "Désaturation profonde", f"SpO2 minimale à {data.spo2_minimale:.0f} % (< 80 %) : risque d'hypoxémie sévère."))
     if data.t90 is not None and data.t90 >= 15:
-        res.alertes.append(
-            Alerte("critique", "Hypoxémie prolongée",
-                   f"Temps passé sous 90 % : {data.t90:.1f} % — retentissement cardiovasculaire possible.")
-        )
+        res.alertes.append(Alerte("critique", "Hypoxémie prolongée", f"Temps passé sous 90 % : {data.t90:.1f} % — retentissement cardiovasculaire possible."))
     elif data.t90 is not None and data.t90 >= 5:
-        res.alertes.append(
-            Alerte("attention", "Hypoxémie",
-                   f"Temps passé sous 90 % : {data.t90:.1f} %.")
-        )
-    centrales = data.evenements_respiratoires.get("apnées centrales")
-    total = sum(data.evenements_respiratoires.values())
-    if centrales is not None and total > 0 and centrales / total >= 0.5 and (iah or 0) >= 5:
-        res.alertes.append(
-            Alerte("attention", "Prédominance d'apnées centrales",
-                   "Majorité d'événements centraux : envisager une polysomnographie et rechercher "
-                   "une insuffisance cardiaque / un trouble central (précaution avant PPC).")
-        )
+        res.alertes.append(Alerte("attention", "Hypoxémie", f"Temps passé sous 90 % : {data.t90:.1f} %."))
     if data.fc_maximale is not None and data.fc_maximale >= 120:
-        res.alertes.append(
-            Alerte("attention", "Tachycardie nocturne",
-                   f"FC maximale nocturne à {data.fc_maximale} bpm : rechercher un retentissement cardiaque.")
-        )
-    if data.epworth is not None and data.epworth >= 11:
-        res.alertes.append(
-            Alerte("attention", "Somnolence diurne excessive",
-                   f"Score d'Epworth à {data.epworth}/24 (≥ 11) : retentissement diurne significatif, "
-                   "risque accidentel (conduite, travail).")
-        )
+        res.alertes.append(Alerte("attention", "Tachycardie nocturne", f"FC maximale nocturne à {data.fc_maximale} bpm : rechercher un retentissement cardiaque."))
+    if ctx.somnolence_positive:
+        res.alertes.append(Alerte("attention", "Somnolence diurne", "Somnolence diurne évocatrice (Epworth ≥ 10 ou plainte) : retentissement diurne significatif."))
     if data.index_plm is not None and data.index_plm >= 15:
-        res.alertes.append(
-            Alerte("attention", "Mouvements périodiques des jambes",
-                   f"Index PLM à {data.index_plm:.1f}/h (≥ 15/h) : à corréler à la plainte ; "
-                   "ferritinémie à discuter si syndrome des jambes sans repos.")
-        )
-    if data.imc is not None and data.imc >= 30:
-        res.alertes.append(
-            Alerte("info", "Obésité", f"IMC à {data.imc:.1f} kg/m² : facteur de risque et cible thérapeutique (poids).")
-        )
+        res.alertes.append(Alerte("attention", "Mouvements périodiques des jambes", f"Index PLM à {data.index_plm:.1f}/h (≥ 15/h) : à corréler à la plainte."))
 
-    # Recommandations
-    if iah >= SEUIL_SEVERES:
-        res.recommandations.append(
-            "SAHOS sévère : mise en route d'un traitement par PPC à privilégier, avec "
-            "auto-titration et évaluation à 3 mois (observance, score résiduel)."
-        )
-    elif iah >= SEUIL_LEGERS:
-        res.recommandations.append(
-            "Discuter le traitement selon la symptomatologie : PPC si somnolence diurne "
-            "ou comorbidités, orthèse d'avancée mandibulaire ou réduction pondérale sinon."
-        )
-    if iah < SEUIL_LEGERS and data.index_micro_eveils is not None and data.index_micro_eveils >= 15:
-        res.recommandations.append(
-            "Index de micro-éveils élevé malgré un IAH normal : envisager une polysomnographie "
-            "à la recherche d'un syndrome de haute résistance des voies aériennes supérieures."
-        )
-    res.recommandations.append(
-        "Information du patient sur l'hygiène du sommeil et le suivi (HAS 2023)."
-    )
+    # Thérapeutique, mesures, suivi, arrêté
+    res.proposition_therapeutique = _proposition(data, ctx)
+    res.mesures_associees = _mesures_associees(data, ctx)
+    res.suivi = _suivi(data, ctx, res.proposition_therapeutique)
+    res.rappel_arrete = _rappel_arrete(data, ctx, iah >= SEUIL_LEGERS)
+    res.vigilance = _vigilance(data, ctx, res)
     return res
