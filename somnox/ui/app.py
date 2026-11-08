@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -16,6 +17,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSplitter,
     QStatusBar,
     QTabWidget,
     QVBoxLayout,
@@ -39,6 +42,7 @@ class MainWindow(QMainWindow):
         self.data: PolygraphData | None = None
         self.result: AnalysisResult | None = None
         self.observer = None
+        self.pdf_path: str | None = None
         self._build_ui()
         self._build_context_inputs()
         if watch_dir:
@@ -93,7 +97,61 @@ class MainWindow(QMainWindow):
         self.status = QStatusBar()
         self.setStatusBar(self.status)
         self.status.showMessage("Prêt — aucun examen chargé.")
-        self.setCentralWidget(root)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(root)
+        splitter.addWidget(self._build_preview())
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([3000, 1000])
+        self.setCentralWidget(splitter)
+
+    def _build_preview(self) -> QWidget:
+        """Panneau droit : aperçu du PDF importé (25 % de la largeur)."""
+        import pymupdf
+
+        self._pymupdf = pymupdf
+        panel = QFrame(objectName="previewPanel")
+        box = QVBoxLayout(panel)
+        box.setContentsMargins(8, 8, 8, 8)
+        box.setSpacing(6)
+        header = QLabel("PDF importé", objectName="previewTitle")
+        self.preview_name = QLabel("Aucun document")
+        self.preview_name.setWordWrap(True)
+        box.addWidget(header)
+        box.addWidget(self.preview_name)
+        self.preview_scroll = QScrollArea()
+        self.preview_scroll.setWidgetResizable(True)
+        self.preview_pages = QWidget()
+        self.preview_layout = QVBoxLayout(self.preview_pages)
+        self.preview_layout.setSpacing(12)
+        self.preview_layout.addStretch(1)
+        self.preview_scroll.setWidget(self.preview_pages)
+        box.addWidget(self.preview_scroll, stretch=1)
+        return panel
+
+    def _show_pdf(self, path: str) -> None:
+        """Affiche toutes les pages du PDF dans le panneau de droite."""
+        while self.preview_layout.count() > 1:
+            item = self.preview_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.preview_name.setText(Path(path).name)
+        try:
+            doc = self._pymupdf.open(path)
+        except Exception as exc:
+            self.preview_name.setText(f"Erreur : {exc}")
+            return
+        width = max(self.preview_scroll.viewport().width() - 24, 200)
+        for page in doc:
+            pix = page.get_pixmap(dpi=150)
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+            pm = QPixmap.fromImage(img).scaledToWidth(width, Qt.SmoothTransformation)
+            lbl = QLabel()
+            lbl.setPixmap(pm)
+            lbl.setAlignment(Qt.AlignCenter)
+            self.preview_layout.insertWidget(self.preview_layout.count() - 1, lbl)
+        doc.close()
 
     def _build_context_inputs(self):
         """Panneau de contexte clinique : symptômes, comorbidités, BOSS, Epworth."""
@@ -150,6 +208,8 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        self.pdf_path = path
+        self._show_pdf(path)
         self.status.showMessage(f"Lecture : {Path(path).name} …")
         try:
             self.data = parse_pdf(path)
