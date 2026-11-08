@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(root)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
+        self._root_layout = layout
 
         hero = QFrame(objectName="hero")
         hero_layout = QHBoxLayout(hero)
@@ -185,7 +186,7 @@ class MainWindow(QMainWindow):
         grid.addLayout(sympt_box)
         grid.addLayout(comorb_box)
         grid.addLayout(scores)
-        self.centralWidget().layout().insertWidget(2, self.ctx_group)
+        self._root_layout.insertWidget(2, self.ctx_group)
 
     def _current_context(self) -> ClinicalContext:
         epworth = self.spin_epworth.value() if self.spin_epworth.value() > 0 else None
