@@ -30,6 +30,8 @@ def main(argv=None) -> int:
     p_watch.add_argument("--comorbidites", default="")
     p_watch.add_argument("--refus-ppc", action="store_true")
 
+    p_setup = sub.add_parser("setup", help="Installer/vérifier Tesseract OCR (pack fra).")
+
     p_gui = sub.add_parser("gui", help="Lancer l'interface graphique.")
     p_gui.add_argument("--watch", default=None, help="Dossier à surveiller au démarrage.")
 
@@ -68,6 +70,12 @@ def main(argv=None) -> int:
                 time.sleep(1)
         except KeyboardInterrupt:
             watcher.stop(observer)
+        return 0
+
+    if args.cmd == "setup":
+        from .setup import install_tesseract
+
+        install_tesseract()
         return 0
 
     if args.cmd == "gui":

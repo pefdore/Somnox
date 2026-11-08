@@ -22,7 +22,13 @@ Application **hors ligne** d'aide à la rédaction des comptes rendus de polygra
 
 ## Installation
 
-Prérequis : Python ≥ 3.10 et [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) avec le paquet de langue `fra` (uniquement pour les PDF scannés).
+Prérequis : Python ≥ 3.10. Tesseract OCR (pack `fra`, uniquement pour les PDF scannés) s'installe ensuite en une commande :
+
+```bash
+somnox setup
+```
+
+Sous Windows ceci utilise `winget` (installateur UB-Mannheim, pack `fra` téléchargé automatiquement), sous Linux `apt-get`, sous macOS `brew`. En cas d'échec, installation manuelle : [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki) (cochez **French**).
 
 ```bash
 pip install -r requirements.txt
