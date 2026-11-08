@@ -16,7 +16,10 @@ Propositions thérapeutiques :
 {% for m in mesures %}
 - {{ m }}
 {% endfor %}
-Bilan complémentaire si besoin : recherche de comorbidités (HTA, diabète, syndrome métabolique), évaluation cardiovasculaire (risque accru d'ACFA, AVC).
+Bilan complémentaire si besoin :
+{% for b in bilan_complementaire %}
+- {{ b }}
+{% endfor %}
 
 Suivi :
 {% for s in suivi %}

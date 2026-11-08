@@ -156,6 +156,11 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
 
     d.fc_moyenne = _first([rf"Pouls moyen{_GAP}{_NUM}\s*bpm", rf"Fr[ée]quence cardiaque moyenne[^0-9\n]*(\d{2,3}[.,]?\d?)"], text)
     d.fc_maximale = _first([rf"Pouls maximal[^\n]*{_GAP}{_NUM}\s*bpm", rf"Fr[ée]quence cardiaque maximale[^0-9\n]*(\d{2,3})"], text)
+    d.fc_minimale = _first([rf"Pouls minimal[^\n]*{_GAP}{_NUM}\s*bpm"], text)
+    d.t85 = _first([rf"SpO2?\s*[≤<=]\s*85%?\s*\([^)]*\)\s*\n?\s*{_NUM}\s*%"], text)
+    d.cheyne_stokes_min = _first([rf"Dur[ée]e Cheyne-Stokes\s*\n?\s*{_NUM}\s*min"], text)
+    d.qualite_enregistrement_pct = _first([rf"Qualit[ée] de l['’]enregistrement\s*\n?\s*{_NUM}\s*%"], text)
+    d.efficacite_sommeil_pct = _first([rf"Est\. efficacit[ée] du sommeil\s*\n?\s*{_NUM}\s*%"], text)
 
     d.position_dorsale_pct = _first([rf"Dorsale{_GAP}\d+[.,]?\d*\s*min{_GAP}{_NUM}\s*%", rf"Décubitus\s*dorsal[^0-9\n]*{_NUM}\s*%"], text)
 

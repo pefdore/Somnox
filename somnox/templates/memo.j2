@@ -26,6 +26,25 @@ Immédiat :
 - Rien de notable.
 {% endfor %}
 
+CHECKLIST AVANT VALIDATION DU COMPTE RENDU
+{% for c in checklist %}
+- {{ c }}
+{% endfor %}
+
+DIAGNOSTICS DIFFÉRENTIELS À ÉVOQUER
+{% for d in diagnostics_differentiels %}
+- {{ d }}
+{% else %}
+- Aucun.
+{% endfor %}
+
+BILAN COMPLÉMENTAIRE À PRÉVOIR
+{% for b in bilan_complementaire %}
+- {{ b }}
+{% else %}
+- Aucun.
+{% endfor %}
+
 ALERTES DU DOSSIER
 {% for a in alertes %}
 - [{{ a.niveau|upper }}] {{ a.titre }} : {{ a.texte }}

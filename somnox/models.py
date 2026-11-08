@@ -54,6 +54,11 @@ class PolygraphData:
     ronflement_dbc_max: Optional[float] = None
     fc_moyenne: Optional[float] = None
     fc_maximale: Optional[float] = None
+    fc_minimale: Optional[float] = None
+    t85: Optional[float] = None
+    cheyne_stokes_min: Optional[float] = None
+    qualite_enregistrement_pct: Optional[float] = None
+    efficacite_sommeil_pct: Optional[float] = None
 
     position_dorsale_pct: Optional[float] = None
     pichot: Optional[int] = None

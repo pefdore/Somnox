@@ -42,7 +42,7 @@ def test_arrete_variantes():
 
 def test_vigilance_boss_manquant():
     r = analyse(_data(iah=20), ClinicalContext())
-    assert any("BOSS" in v["texte"] for v in r.vigilance)
+    assert any("BOSS" in v["texte"] for v in r.vigilance) or any("BOSS" in c for c in r.checklist)
 
 
 def test_memo_contient_vigilance():

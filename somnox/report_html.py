@@ -98,6 +98,14 @@ def memo_html(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | N
                  f"<ul style='margin:4px 0;'>{_list_html(vig_imm)}</ul>"),
         _section("VIGILANCE À TERME", "#8D5000",
                  f"<ul style='margin:4px 0;'>{_list_html(vig_terme)}</ul>"),
+        _section("&#9989; CHECKLIST AVANT VALIDATION", "#1D1B20",
+                 "<div style='background:#FEF7FF;border:1px dashed #6750A4;border-radius:12px;"
+                 "padding:8px 12px;'><ul style='margin:4px 0;'>"
+                 + _list_html(res.checklist) + "</ul></div>"),
+        _section("DIAGNOSTICS DIFFÉRENTIELS", "#4F378B",
+                 f"<ul style='margin:4px 0;'>{_list_html(res.diagnostics_differentiels)}</ul>"),
+        _section("BILAN COMPLÉMENTAIRE", "#4F378B",
+                 f"<ul style='margin:4px 0;'>{_list_html(res.bilan_complementaire)}</ul>"),
         _section("ALERTES DU DOSSIER", "#B3261E", _alertes_html(res.alertes)),
         _section("INTERPRÉTATION (recommandations françaises)", "#4F378B",
                  f"<ul style='margin:4px 0;'>{_list_html(res.interpretation)}</ul>"),
