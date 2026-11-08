@@ -50,7 +50,7 @@ def test_contexte_clinique_d_indications(data):
     assert data.pichot == 18
     assert data.boss == 0
     ctx = default_context(data)
-    assert ctx.controle_oam
+    assert ctx.type_examen == "controle_oam"
     assert "post OAM" in data.indications
 
 

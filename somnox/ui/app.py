@@ -28,7 +28,8 @@ from PySide6.QtWidgets import (
 from .. import watcher
 from ..analysis import AnalysisResult, analyse
 from ..generate import DOCS, generate_all
-from ..models import COMORBIDITES_UI, SYMPTOMES_UI, ClinicalContext, PolygraphData
+from ..context import build_context
+from ..models import COMORBIDITES_UI, SYMPTOMES_UI, TYPE_EXAMEN_LABELS, ClinicalContext, PolygraphData
 from ..parser import parse_pdf
 
 THEME = Path(__file__).parent.parent / "theme.qss"
@@ -156,10 +157,18 @@ class MainWindow(QMainWindow):
 
     def _build_context_inputs(self):
         """Panneau de contexte clinique : symptômes, comorbidités, BOSS, Epworth."""
-        from PySide6.QtWidgets import QCheckBox, QGroupBox, QSpinBox
+        from PySide6.QtWidgets import QCheckBox, QComboBox, QGroupBox, QSpinBox
 
-        self.ctx_group = QGroupBox("Contexte clinique (absent du PDF)")
+        self.ctx_group = QGroupBox("Contexte clinique — pré-rempli depuis les Indications, ajustable")
         grid = QHBoxLayout(self.ctx_group)
+
+        type_box = QVBoxLayout()
+        self.combo_type = QComboBox()
+        self.combo_type.addItems(list(TYPE_EXAMEN_LABELS.values()))
+        type_box.addWidget(QLabel("Type d'examen :"))
+        type_box.addWidget(self.combo_type)
+        type_box.addStretch(1)
+        grid.addLayout(type_box)
 
         sympt_box = QVBoxLayout()
         self.chk_sympt = {}
@@ -192,14 +201,33 @@ class MainWindow(QMainWindow):
         epworth = self.spin_epworth.value() if self.spin_epworth.value() > 0 else None
         boss = self.spin_boss.value() if self.spin_boss.value() > 0 else None
         pichot = self.spin_pichot.value() if self.spin_pichot.value() > 0 else None
+        type_key = next(
+            (k for k, lbl in TYPE_EXAMEN_LABELS.items() if lbl == self.combo_type.currentText()),
+            "primo",
+        )
         return ClinicalContext(
             epworth=epworth,
             boss=boss,
             pichot=pichot,
+            type_examen=type_key,
             comorbidites=[k for k, cb in self.chk_comorb.items() if cb.isChecked()],
             refus_ppc=self.chk_refus_ppc.isChecked(),
             **{k: cb.isChecked() for k, cb in self.chk_sympt.items()},
         )
+
+    def _prefill_context(self, ctx: ClinicalContext) -> None:
+        """Pré-remplit le panneau avec le contexte extrait des Indications."""
+        self.combo_type.setCurrentText(TYPE_EXAMEN_LABELS.get(ctx.type_examen, TYPE_EXAMEN_LABELS["primo"]))
+        if ctx.epworth is not None:
+            self.spin_epworth.setValue(ctx.epworth)
+        if ctx.boss is not None:
+            self.spin_boss.setValue(ctx.boss)
+        if ctx.pichot is not None:
+            self.spin_pichot.setValue(ctx.pichot)
+        for key, cb in self.chk_sympt.items():
+            cb.setChecked(getattr(ctx, key, False))
+        for label, cb in self.chk_comorb.items():
+            cb.setChecked(label in ctx.comorbidites)
 
     # ---------------------------------------------------------------- actions
 
@@ -214,10 +242,7 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"Lecture : {Path(path).name} …")
         try:
             self.data = parse_pdf(path)
-            if self.data.epworth is not None:
-                self.spin_epworth.setValue(self.data.epworth)
-            if self.data.pichot is not None:
-                self.spin_pichot.setValue(self.data.pichot)
+            self._prefill_context(build_context(self.data))
             self.result = analyse(self.data, self._current_context())
             self._display()
         except Exception as exc:

@@ -77,7 +77,7 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
 
     m = re.search(r"[ÂA]ge\s*:?\s*(\d{1,3})\s*ans", text, re.IGNORECASE)
     d.age = f"{m.group(1)} ans" if m else ""
-    m = re.search(r"Indications\s*\n([\s\S]{0,400}?)(?=\n\s*(?:Charge hypoxique|Param[èe]tres respiratoires))", text, re.IGNORECASE)
+    m = re.search(r"Indications\s*\n([\s\S]*?)(?=\n\s*(?:Charge hypoxique|Param[èe]tres respiratoires)|\n\s*\n|$)", text, re.IGNORECASE)
     d.indications = " ".join(m.group(1).split()) if m else ""
 
     d.imc = _first([rf"IMC{_GAP}{_NUM}\s*kg/m", rf"IMC[^0-9\n]*{_NUM}"], text)

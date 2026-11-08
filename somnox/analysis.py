@@ -109,6 +109,42 @@ def _proposition(data: PolygraphData, ctx: ClinicalContext) -> str:
     if iah is None:
         return "IAH non disponible : pas de proposition thérapeutique possible avant contrôle du document."
     comorb = bool(ctx.comorbidites)
+
+    if ctx.type_examen == "controle_oam":
+        if iah < SEUIL_MODERES:
+            return (
+                f"Contrôle sous OAM à 4 mois : efficacité confirmée (IAH résiduel à {iah:g}/h, "
+                "< 15/h). Poursuite de l'OAM."
+            )
+        if iah < SEUIL_SEVERES:
+            base = (
+                f"Contrôle sous OAM à 4 mois : réponse insuffisante (IAH résiduel à {iah:g}/h, "
+                "≥ 15/h) — vérifier calage dentaire, observance et avancée mandibulaire ; "
+            )
+            if comorb:
+                base += (
+                    "en cas d'échec, bascule vers la PPC (prise en charge possible : "
+                    f"IAH ≥ 15/h avec comorbidités : {', '.join(ctx.comorbidites)})."
+                )
+            else:
+                base += "en cas d'échec, réévaluer les options (PPC non prise en charge sans comorbidité à ce stade)."
+            return base
+        return (
+            f"Contrôle sous OAM à 4 mois : échec (IAH résiduel à {iah:g}/h, ≥ 30/h) — "
+            "bascule vers la PPC (prise en charge due, IAH ≥ 30/h avec ou sans comorbidités)."
+        )
+
+    if ctx.type_examen == "controle_ppc":
+        if iah < SEUIL_MODERES:
+            return (
+                f"Contrôle sous PPC : contrôle favorable (IAH résiduel à {iah:g}/h, < 15/h). "
+                "Poursuite du traitement, contrôle de l'observance."
+            )
+        return (
+            f"Contrôle sous PPC : IAH résiduel à {iah:g}/h — vérifier observance, étanchéité du "
+            "circuit, masque, pression et position ; envisager une réoptimisation (auto-PPC, "
+            "pression fixe majorée) ou un avis spécialisé."
+        )
     if iah >= SEUIL_SEVERES:
         return (
             "Indication au remboursement de la PPC : IAH ≥ 30/h (prise en charge due "
@@ -165,10 +201,18 @@ def _mesures_associees(data: PolygraphData, ctx: ClinicalContext) -> list[str]:
 
 def _suivi(data: PolygraphData, ctx: ClinicalContext, proposition: str) -> list[str]:
     suivi = []
-    if "OAM" in proposition:
-        suivi.append("Contrôle sous OAM à 4 mois (efficacité, tolérance, calage dentaire).")
-    if "PPC" in proposition:
-        suivi.append("Consultation à 4 mois si mise en place de la PPC (observance, effets résiduels).")
+    if ctx.type_examen == "controle_oam":
+        if "efficacité confirmée" in proposition:
+            suivi.append("OAM efficace : poursuite ; contrôle à 12 mois ou si aggravation symptomatique.")
+        else:
+            suivi.append("Nouveau contrôle polygraphique après optimisation de l'OAM (calage/avancée mandibulaire).")
+    elif ctx.type_examen == "controle_ppc":
+        suivi.append("Contrôle clinique à 4 mois (observance, effets résiduels) ; réoptimisation si IAH résiduel ≥ 15/h.")
+    else:
+        if "Indication au remboursement d'une OAM" in proposition or "OAM" in proposition:
+            suivi.append("Contrôle sous OAM à 4 mois (efficacité, tolérance, calage dentaire).")
+        if "PPC" in proposition:
+            suivi.append("Consultation à 4 mois si mise en place de la PPC (observance, effets résiduels).")
     if ctx.somnolence_positive and (data.iah or 0) < SEUIL_MODERES:
         suivi.append(
             "Polysomnographie si somnolence sévère non expliquée par la polygraphie."

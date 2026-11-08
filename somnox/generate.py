@@ -8,7 +8,7 @@ from docx import Document
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .analysis import AnalysisResult
-from .models import ClinicalContext, PolygraphData, default_context
+from .models import TYPE_EXAMEN_LABELS, ClinicalContext, PolygraphData, default_context
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -84,6 +84,8 @@ def _symptomes(ctx: ClinicalContext, data: PolygraphData) -> str:
         items.append("nycturie")
     if ctx.cephees_matinales:
         items.append("céphalées matinales")
+    if ctx.sensation_etouffement:
+        items.append("sensation d'étouffement")
     if ctx.ronflements_constates:
         items.append("ronflements constatés par l'entourage")
     return ", ".join(items) if items else "pas de symptôme évocateur rapporté (à compléter si besoin)"
@@ -107,6 +109,8 @@ def context(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | Non
     return {
         "patient": data.patient or "Patient(e)",
         "date_examen": data.date_examen or "date non retrouvée",
+        "type_examen": TYPE_EXAMEN_LABELS.get(ctx.type_examen, "Polygraphie ventilatoire"),
+        "notes_ctx": ctx.notes,
         "severite": res.severite,
         "conclusion": res.conclusion,
         "fiabilite": res.fiabilite,

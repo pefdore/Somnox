@@ -82,7 +82,8 @@ class ClinicalContext:
     ronflements_constates: bool = False
     comorbidites: list[str] = field(default_factory=list)
     refus_ppc: bool = False
-    controle_oam: bool = False
+    type_examen: str = "primo"
+    sensation_etouffement: bool = False
     epworth: Optional[int] = None
     boss: Optional[int] = None
     pichot: Optional[int] = None
@@ -103,6 +104,7 @@ SYMPTOMES_UI = {
     "nycturie": "Nycturie",
     "cephees_matinales": "Céphalées matinales",
     "ronflements_constates": "Ronflements constatés",
+    "sensation_etouffement": "Sensation d'étouffement",
 }
 
 COMORBIDITES_UI = (
@@ -113,14 +115,19 @@ COMORBIDITES_UI = (
     "ACFA",
     "AVC/AIT",
     "coronaropathie",
+    "BPCO",
+    "asthme",
 )
+
+TYPE_EXAMEN_LABELS = {
+    "primo": "Polygraphie de première intention",
+    "controle_oam": "Contrôle sous OAM (4 mois)",
+    "controle_ppc": "Contrôle sous PPC",
+}
 
 
 def default_context(data: PolygraphData) -> ClinicalContext:
-    """Pré-remplit le contexte clinique depuis les données extraites du PDF."""
-    ctx = ClinicalContext(epworth=data.epworth, pichot=data.pichot, boss=data.boss)
-    if data.epworth is not None and data.epworth >= 10:
-        ctx.somnolence = True
-    if data.indications and ("oam" in data.indications.lower()):
-        ctx.controle_oam = True
-    return ctx
+    """Pré-remplit le contexte clinique depuis les Indications du PDF."""
+    from .context import build_context
+
+    return build_context(data)
