@@ -164,7 +164,16 @@ def render(doc: str, data: PolygraphData, res: AnalysisResult, ctx: ClinicalCont
     return _env.get_template(f"{doc}.j2").render(**context(data, res, ctx, medecin))
 
 
+ALERT_COLORS = {
+    "[CRITIQUE]": (179, 38, 30),
+    "[ATTENTION]": (141, 80, 0),
+    "[INFO]": (79, 55, 139),
+}
+
+
 def _write_docx(text: str, path: Path, title: str) -> None:
+    from docx.shared import RGBColor
+
     d = Document()
     d.add_heading(title, 0)
     for line in text.splitlines():
@@ -174,7 +183,12 @@ def _write_docx(text: str, path: Path, title: str) -> None:
         if line.isupper() and len(line) > 3:
             d.add_heading(line.title(), level=2)
         else:
-            d.add_paragraph(line)
+            p = d.add_paragraph()
+            color = next((c for tag, c in ALERT_COLORS.items() if line.startswith(tag)), None)
+            run = p.add_run(line)
+            if color:
+                run.font.color.rgb = RGBColor(*color)
+                run.font.bold = True
     d.save(path)
 
 

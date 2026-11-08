@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStatusBar,
     QTabWidget,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -28,11 +29,87 @@ from PySide6.QtWidgets import (
 from .. import watcher
 from ..analysis import AnalysisResult, analyse
 from ..generate import DOCS, generate_all
+from ..report_html import alertes_html, memo_html
 from ..context import build_context
 from ..models import COMORBIDITES_UI, SYMPTOMES_UI, TYPE_EXAMEN_LABELS, ClinicalContext, PolygraphData
 from ..parser import parse_pdf
 
 THEME = Path(__file__).parent.parent / "theme.qss"
+
+
+class PdfPreview(QScrollArea):
+    """Aperçu PDF : pages toujours ajustées à la largeur de la zone, zoom molette Ctrl + pinch."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWidgetResizable(True)
+        self._zoom = 1.0
+        self._pixmaps: list = []
+        self._labels: list[QLabel] = []
+        self.pages = QWidget()
+        self._layout = QVBoxLayout(self.pages)
+        self._layout.setSpacing(12)
+        self._layout.addStretch(1)
+        self.setWidget(self.pages)
+        self.viewport().installEventFilter(self)
+        self.grabGesture(Qt.PinchGesture)
+
+    def clear(self) -> None:
+        self._pixmaps.clear()
+        self._labels.clear()
+        while self._layout.count() > 1:
+            item = self._layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def load(self, path: str) -> None:
+        import pymupdf
+
+        self.clear()
+        try:
+            doc = pymupdf.open(path)
+        except Exception as exc:
+            self._layout.insertWidget(0, QLabel(f"Erreur : {exc}"))
+            return
+        for page in doc:
+            pix = page.get_pixmap(dpi=200)
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+            self._pixmaps.append(QPixmap.fromImage(img))
+            lbl = QLabel()
+            lbl.setAlignment(Qt.AlignCenter)
+            self._labels.append(lbl)
+            self._layout.insertWidget(self._layout.count() - 1, lbl)
+        doc.close()
+        self.rescale()
+
+    def rescale(self) -> None:
+        if not self._pixmaps:
+            return
+        width = max(int((self.viewport().width() - 24) * self._zoom), 100)
+        for pm, lbl in zip(self._pixmaps, self._labels):
+            lbl.setPixmap(pm.scaledToWidth(width, Qt.SmoothTransformation))
+        self.pages.adjustSize()
+
+    def eventFilter(self, obj, event):
+        if obj is self.viewport() and event.type() == event.Type.Resize:
+            self.rescale()
+        return super().eventFilter(obj, event)
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            self._zoom = max(0.3, min(5.0, self._zoom * (1.1 if event.angleDelta().y() > 0 else 0.9)))
+            self.rescale()
+        else:
+            super().wheelEvent(event)
+
+    def event(self, event):
+        if event.type() == event.Type.Gesture:
+            gesture = event.gesture(Qt.PinchGesture)
+            if gesture:
+                self._zoom = max(0.3, min(5.0, self._zoom * gesture.scaleFactor()))
+                self.rescale()
+                return True
+        return super().event(event)
 
 
 class MainWindow(QMainWindow):
@@ -82,7 +159,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(actions)
 
         self.tabs = QTabWidget()
-        self.editors: dict[str, QPlainTextEdit] = {}
+        self.editors: dict[str, QWidget] = {}
         titles = {
             "compte_rendu": "Compte rendu",
             "memo": "Mémo praticien",
@@ -90,8 +167,12 @@ class MainWindow(QMainWindow):
             "courrier": "Courrier MT",
         }
         for doc in DOCS:
-            edit = QPlainTextEdit()
-            edit.setReadOnly(True)
+            if doc in ("memo", "alertes"):
+                edit = QTextBrowser()
+                edit.setOpenExternalLinks(False)
+            else:
+                edit = QPlainTextEdit()
+                edit.setReadOnly(True)
             self.editors[doc] = edit
             self.tabs.addTab(edit, titles[doc])
         layout.addWidget(self.tabs, stretch=1)
@@ -109,51 +190,24 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
 
     def _build_preview(self) -> QWidget:
-        """Panneau droit : aperçu du PDF importé (25 % de la largeur)."""
-        import pymupdf
-
-        self._pymupdf = pymupdf
+        """Panneau droit : aperçu du PDF importé (25 % de la largeur, zoomable)."""
         panel = QFrame(objectName="previewPanel")
         box = QVBoxLayout(panel)
         box.setContentsMargins(8, 8, 8, 8)
         box.setSpacing(6)
-        header = QLabel("PDF importé", objectName="previewTitle")
+        header = QLabel("PDF importé — Ctrl+molette / pinch pour zoomer", objectName="previewTitle")
+        header.setWordWrap(True)
         self.preview_name = QLabel("Aucun document")
         self.preview_name.setWordWrap(True)
+        self.preview = PdfPreview()
         box.addWidget(header)
         box.addWidget(self.preview_name)
-        self.preview_scroll = QScrollArea()
-        self.preview_scroll.setWidgetResizable(True)
-        self.preview_pages = QWidget()
-        self.preview_layout = QVBoxLayout(self.preview_pages)
-        self.preview_layout.setSpacing(12)
-        self.preview_layout.addStretch(1)
-        self.preview_scroll.setWidget(self.preview_pages)
-        box.addWidget(self.preview_scroll, stretch=1)
+        box.addWidget(self.preview, stretch=1)
         return panel
 
     def _show_pdf(self, path: str) -> None:
-        """Affiche toutes les pages du PDF dans le panneau de droite."""
-        while self.preview_layout.count() > 1:
-            item = self.preview_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
         self.preview_name.setText(Path(path).name)
-        try:
-            doc = self._pymupdf.open(path)
-        except Exception as exc:
-            self.preview_name.setText(f"Erreur : {exc}")
-            return
-        width = max(self.preview_scroll.viewport().width() - 24, 200)
-        for page in doc:
-            pix = page.get_pixmap(dpi=150)
-            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
-            pm = QPixmap.fromImage(img).scaledToWidth(width, Qt.SmoothTransformation)
-            lbl = QLabel()
-            lbl.setPixmap(pm)
-            lbl.setAlignment(Qt.AlignCenter)
-            self.preview_layout.insertWidget(self.preview_layout.count() - 1, lbl)
-        doc.close()
+        self.preview.load(path)
 
     def _build_context_inputs(self):
         """Panneau de contexte clinique : symptômes, comorbidités, BOSS, Epworth."""
@@ -290,8 +344,14 @@ class MainWindow(QMainWindow):
         self.severity.setProperty("sev", self.result.severite)
         self.severity.style().unpolish(self.severity)
         self.severity.style().polish(self.severity)
+        ctx = self._current_context()
         for doc in DOCS:
-            self.editors[doc].setPlainText(render(doc, self.data, self.result, self._current_context()))
+            if doc == "memo":
+                self.editors[doc].setHtml(memo_html(self.data, self.result, ctx))
+            elif doc == "alertes":
+                self.editors[doc].setHtml(alertes_html(self.data, self.result, ctx))
+            else:
+                self.editors[doc].setPlainText(render(doc, self.data, self.result, ctx))
         self.status.showMessage(
             f"Examen chargé ({self.data.methode_extraction}) — {self.data.patient or 'patient inconnu'}"
         )
