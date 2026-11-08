@@ -1,8 +1,9 @@
 """Extraction structurée des paramètres de polygraphie à partir du texte brut.
 
-Conçu pour les rapports Nox A1/T3 (noxT3s) exportés en français, avec
-tolérance pour les variantes de libellés et les rapports génériques
-(IAH/AHI, virgule décimale, etc.).
+Calé sur les rapports Noxturnal (noxT3s) : libellé et valeur sur des lignes
+séparées, tableaux multi-colonnes (Total / Dorsal / Non-dorsal / REM / NREM),
+contexte clinique (Pichot, Epworth, BOSS) dans la zone « Indications ».
+Les rapports génériques restent pris en charge en repli.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 from .models import PolygraphData
 
 _NUM = r"(\d{1,3}[.,]?\d{0,2})"
+_GAP = r"[\s\S]{0,40}?"
 
 
 def _f(value: str | None) -> float | None:
@@ -24,11 +26,13 @@ def _f(value: str | None) -> float | None:
         return None
 
 
-def _search(pattern: str, text: str, flags: int = re.IGNORECASE | re.MULTILINE) -> float | None:
-    m = re.search(pattern, text, flags)
-    if not m:
-        return None
-    return _f(m.group(1))
+def _search(pattern: str, text: str) -> float | None:
+    m = re.search(pattern, text, re.IGNORECASE)
+    return _f(m.group(1)) if m else None
+
+
+def _search_all(pattern: str, text: str) -> list[float]:
+    return [_f(m.group(1)) for m in re.finditer(pattern, text, re.IGNORECASE)]
 
 
 def _first(patterns: list[str], text: str) -> float | None:
@@ -39,132 +43,136 @@ def _first(patterns: list[str], text: str) -> float | None:
     return None
 
 
+def _last(patterns: list[str], text: str) -> float | None:
+    for p in patterns:
+        vals = [v for v in _search_all(p, text) if v is not None]
+        if vals:
+            return vals[-1]
+    return None
+
+
 def _patient(text: str) -> str:
     m = re.search(r"Patient\s*:\s*(.+)", text, re.IGNORECASE)
     if not m:
         m = re.search(r"Nom\s*:\s*(.+)", text, re.IGNORECASE)
-    if not m:
-        return ""
-    return m.group(1).strip()[:80]
+    return m.group(1).strip()[:80] if m else ""
 
 
 def _date_examen(text: str) -> str:
-    m = re.search(r"(?:Date d(?:'|e |u )?(?:examen|enregistrement)\s*:\s*|Enregistré le\s*:?)(.{0,30})", text, re.IGNORECASE)
+    m = re.search(r"(?:Date d['’](?:examen|enregistrement)\s*:?)(.{0,30})", text, re.IGNORECASE)
+    if not m:
+        m = re.search(r"(?:Début et fin de l['’]enregistrement\s*\n?)(.{0,30})", text, re.IGNORECASE)
     if not m:
         m = re.search(r"(\d{2}[/.-]\d{2}[/.-]\d{4})", text)
-    return m.group(1).strip() if m else ""
+    if not m:
+        return ""
+    line = m.group(1).strip().splitlines()[0]
+    return line[:30]
 
 
 def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
-    data = PolygraphData(texte_brut=text, source=source, methode_extraction=methode)
-    data.patient = _patient(text)
-    data.date_examen = _date_examen(text)
+    d = PolygraphData(texte_brut=text, source=source, methode_extraction=methode)
+    d.patient = _patient(text)
+    d.date_examen = _date_examen(text)
 
-    data.iah = _first(
+    m = re.search(r"[ÂA]ge\s*:?\s*(\d{1,3})\s*ans", text, re.IGNORECASE)
+    d.age = f"{m.group(1)} ans" if m else ""
+    m = re.search(r"Indications\s*\n([\s\S]{0,400}?)(?=\n\s*(?:Charge hypoxique|Param[èe]tres respiratoires))", text, re.IGNORECASE)
+    d.indications = " ".join(m.group(1).split()) if m else ""
+
+    d.imc = _first([rf"IMC{_GAP}{_NUM}\s*kg/m", rf"IMC[^0-9\n]*{_NUM}"], text)
+    d.epworth = None if (v := _last([r"Ep(?:o|wo)rth\s*:?\s*(\d{1,2})", r"Epworth[^0-9\n]*(\d{1,2})"], text)) is None else int(v)
+    d.pichot = None if (v := _last([r"Pichot\s*:?\s*(\d{1,2})"], text)) is None else int(v)
+    d.boss = None if (v := _last([r"BOSS\s*:?\s*(\d{1,2})"], text)) is None else int(v)
+
+    d.temps_enregistrement_min = _first(
+        [rf"Dur[ée]e d['’]enregistrement{_GAP}{_NUM}\s*min", rf"Dur[ée]e d['’]enregistrement[^0-9\n]*{_NUM}"], text
+    )
+    d.temps_analyse_min = _first(
+        [rf"Dur[ée]e d['’]analyse{_GAP}{_NUM}\s*min", rf"Dur[ée]e d['’]analyse[^0-9\n]*{_NUM}"], text
+    )
+
+    # IAH : libellé Noxturnal d'abord, sinon replis génériques
+    d.iah = _first(
         [
+            rf"Index Apn[ée]es Hypopn[ée]es{_GAP}{_NUM}\s*/h",
+            rf"\bIAH\b\s*\([^)]*\){_GAP}{_NUM}\s*/h",
             rf"\bIAH\b[^0-9\n]*{_NUM}",
-            rf"Index\s+d['’]apnées[\s–-]*hypopnées[^0-9\n]*{_NUM}",
             rf"\bAHI\b[^0-9\n]*{_NUM}",
         ],
         text,
     )
-    data.index_apnees = _first([rf"\bIA\b[^0-9\n]*{_NUM}", rf"Index\s+d['’]apnées\b[^0-9\n]*{_NUM}", rf"\bAI\b[^0-9\n]*{_NUM}"], text)
-    data.index_hypopnees = _first([rf"\bIH\b[^0-9\n]*{_NUM}", rf"Index\s+d['’]hypopnées\b[^0-9\n]*{_NUM}", rf"\bHI\b[^0-9\n]*{_NUM}"], text)
-    data.index_desat = _first(
+    d.iaho = _first([rf"\bIAHo\b{_GAP}{_NUM}\s*/h", rf"IAHo\b[^0-9\n]*{_NUM}"], text)
+    d.iahc = _first([rf"\bIAHc\b{_GAP}{_NUM}\s*/h", rf"IAHc\b[^0-9\n]*{_NUM}"], text)
+    d.index_apnees = _first([rf"Apn[ée]es obstructives{_GAP}{_NUM}\s*/h", rf"\bIA\b[^0-9\n]*{_NUM}"], text)
+    d.index_hypopnees = _first([rf"Hypopn[ée]es\s*\(\d+[^)]*\){_GAP}{_NUM}\s*/h", rf"Hypopn[ée]es{_GAP}{_NUM}\s*/h", rf"\bIH\b[^0-9\n]*{_NUM}"], text)
+
+    d.index_desat = _first(
         [
-            rf"Index\s+de\s+désaturation[^0-9\n]*{_NUM}",
+            rf"Index de d[ée]saturation[s]? en oxyg[èe]ne\s*\(IDO\){_GAP}{_NUM}\s*/h",
+            rf"Index de d[ée]saturations?\s*\(\d+[^)]*\){_GAP}{_NUM}\s*/h",
+            rf"Index de d[ée]saturation[s]?\s*:?[\s\S]{{0,20}}?{_NUM}",
+            rf"\bIDO\b[^0-9\n]*{_NUM}\s*/h",
             rf"\bODI\b[^0-9\n]*{_NUM}",
-            rf"IDI\b[^0-9\n]*{_NUM}",
         ],
         text,
     )
-    data.iah_rem = _first([rf"IAH\s*(?:en\s*)?REM[^0-9\n]*{_NUM}", rf"AHI\s*REM[^0-9\n]*{_NUM}"], text)
-    data.iahc = _first([rf"IAH\s*central[^0-9\n]*{_NUM}", rf"IAHc\b[^0-9\n]*{_NUM}", rf"Index\s+d['’]apn(?:ées|ée)\s+centrales[^0-9\n]*{_NUM}"], text)
-    data.iaho = _first([rf"IAH\s*obstructif[^0-9\n]*{_NUM}", rf"IAHo\b[^0-9\n]*{_NUM}", rf"Index\s+d['’]apn(?:ées|ée)\s+obstructives[^0-9\n]*{_NUM}"], text)
-    data.iah_dorsal = _first([rf"IAH\s+décubitus\s*dorsal[^0-9\n]*{_NUM}", rf"IAH\s*dorsal[^0-9\n]*{_NUM}", rf"AHI\s*supine[^0-9\n]*{_NUM}"], text)
-    data.iah_latéral = _first([rf"IAH\s*(?:décubitus\s*)?latéral[^0-9\n]*{_NUM}", rf"AHI\s*lat(?:eral|éral)?[^0-9\n]*{_NUM}"], text)
 
-    m = re.search(r"SpO2?\s*moyenne[^0-9\n]*(\d{2,3}[.,]?\d{0,1})", text, re.IGNORECASE)
-    data.spo2_moyenne = _f(m.group(1)) if m else None
-    m = re.search(r"SpO2?\s*(?:mini(?:male|male)?|minimale|la plus basse)[^0-9\n]*(\d{2,3})", text, re.IGNORECASE)
-    data.spo2_minimale = _f(m.group(1)) if m else None
-    data.t90 = _first(
-        [
-            rf"Temps\s+passé\s+sous\s*90\s*%[^0-9\n]*{_NUM}",
-            rf"\bT90\b[^0-9\n]*{_NUM}",
-            rf"SpO2?\s*<\s*90\s*%[^0-9\n]*{_NUM}",
-        ],
-        text,
-    )
-    m = re.search(r"Temps\s+passé\s+sous\s*90\s*%\D*?([0-9]{1,4})\s*min", text, re.IGNORECASE)
-    data.t90_min = _f(m.group(1)) if m else None
-    data.charge_hypoxique = _first([rf"Charge\s+hypoxique[^0-9\n]*{_NUM}"], text)
-    m = re.search(r"SpO2?\s*(?:min(?:imale)?\s*)?(?:en\s*)?REM[^0-9\n]*(\d{2,3})", text, re.IGNORECASE)
-    data.spo2_min_rem = _f(m.group(1)) if m else None
+    d.iah_dorsal = _first([rf"IAH dorsal{_GAP}{_NUM}\s*/h", rf"IAH\s+décubitus\s*dorsal[^0-9\n]*{_NUM}"], text)
+    d.iah_latéral = _first([rf"IAH non-dorsal{_GAP}{_NUM}\s*/h", rf"IAH\s*(?:décubitus\s*)?lat[ée]ral[^0-9\n]*{_NUM}"], text)
 
-    data.index_micro_eveils = _first(
-        [
-            rf"Index\s+de\s+micro[\s-]*éveils?[^0-9\n]*{_NUM}",
-            rf"Index\s+micro[\s-]*éveils?[^0-9\n]*{_NUM}",
-            rf"\bArousal\s*index\b[^0-9\n]*{_NUM}",
-        ],
-        text,
+    # Ligne tableau : Total / Dorsal / Non-dorsal / REM / NREM
+    m = re.search(
+        r"Apn[ée]es \+ Hypopn[ée]es \(IAH\)[\s\S]{0,10}?(\d+[.,]?\d*)\s*/h"
+        r"[\s\S]{0,10}?(\d+[.,]?\d*)\s*/h[\s\S]{0,10}?(\d+[.,]?\d*)\s*/h"
+        r"[\s\S]{0,10}?(\d+[.,]?\d*)\s*/h",
+        text, re.IGNORECASE,
     )
-    data.index_pvt = _first([rf"Index\s+de\s+pressions\s+ventilatoires\s+transitoires[^0-9\n]*{_NUM}", rf"\bRERA\b[^0-9\n]*{_NUM}"], text)
-    data.index_plm = _first(
-        [
-            rf"Index\s+(?:PLM| mouvements\s+périodiques\s+des\s+jambes)[^0-9\n]*{_NUM}",
-            rf"\bPLMS?I?\b[^0-9\n]*{_NUM}",
-        ],
-        text,
-    )
-    data.index_plm_eveils = _first([rf"Index\s+PLM\s+avec\s+(?:micro[\s-]*)?éveils?[^0-9\n]*{_NUM}"], text)
+    if m:
+        d.iah_rem = _f(m.group(4))
+    if d.iah_rem is None:
+        d.iah_rem = _first([rf"IAH\s*(?:en\s*)?REM[^0-9\n]*{_NUM}", rf"AHI\s*REM[^0-9\n]*{_NUM}"], text)
 
-    data.temps_enregistrement_min = _first(
-        [rf"Durée\s+d['’]enregistrement[^0-9\n]*(?:\(min\))?[^0-9\n]*{_NUM}", rf"Temps\s+d['’]enregistrement[^0-9\n]*{_NUM}"], text
-    )
-    data.temps_analyse_min = _first(
-        [rf"Durée\s+d['’]analyse[^0-9\n]*(?:\(min\))?[^0-9\n]*{_NUM}", rf"Temps\s+d['’]analyse[^0-9\n]*{_NUM}", rf"Analyse\s*\(min\)[^0-9\n]*{_NUM}"], text
-    )
-    data.temps_sommeil_estime_min = _first(
-        [rf"Temps\s+de\s+sommeil\s+estimé[^0-9\n]*{_NUM}", rf"Sommeil\s+estimé[^0-9\n]*{_NUM}"], text
-    )
+    d.spo2_moyenne = _first([rf"SpO2?\s*moyenne\s*:?\s*{_NUM}\s*%?", rf"SpO2?\s*moyenne[^0-9\n]*{_NUM}"], text)
+    d.spo2_minimale = _first([rf"SpO2?\s*minimale\s*:?\s*{_NUM}\s*%?", rf"SpO2?\s*(?:minimale|la plus basse)[^0-9\n]*{_NUM}"], text)
 
-    data.ronflement_pct = _first([rf"Ronflement[^0-9\n]*{_NUM}\s*%", rf"Snoring[^0-9\n]*{_NUM}\s*%"], text)
-    data.ronflement_dbc_moy = _first([rf"Ronflement[^0-9\n]*moyen[^0-9\n]*({_NUM})\s*dBc?", rf"Snoring[^0-9\n]*mean[^0-9\n]*({_NUM})\s*dB"], text)
-    data.ronflement_dbc_max = _first([rf"Ronflement[^0-9\n]*max(?:imal|imum)?[^0-9\n]*({_NUM})\s*dBc?", rf"Snoring[^0-9\n]*max[^0-9\n]*({_NUM})\s*dB"], text)
-    data.activations_autonomiques = _first([rf"Activations?\s+autonomiques?[^0-9\n]*{_NUM}", rf"Autonomic\s+activation[^0-9\n]*{_NUM}"], text)
-    m = re.search(r"(?:Durée|Temps)\s+d['’](?:éveil|eveil)[^0-9\n]*([0-9]{1,3})\s*min", text, re.IGNORECASE)
-    data.temps_eveil_min = _f(m.group(1)) if m else None
-    data.position_dorsale_pct = _first([rf"Décubitus\s+dorsal[^0-9\n]*{_NUM}\s*%", rf"\bSupine\b[^0-9\n]*{_NUM}\s*%", rf"Position\s+dorsale[^0-9\n]*{_NUM}\s*%"], text)
+    m = re.search(r"Dur[ée]e SpO2?\s*<\s*90%?\s*\n?\s*(\d{1,3}[.,]?\d*)\s*%?\s*(?:soit\s*(\d+[.,]?\d*)\s*min)?", text, re.IGNORECASE)
+    if m:
+        d.t90 = _f(m.group(1))
+        d.t90_min = _f(m.group(2))
+    if d.t90 is None:
+        d.t90 = _first([rf"Temps\s+passé\s+sous\s*90\s*%[^0-9\n]*{_NUM}", rf"\bT90\b[^0-9\n]*{_NUM}"], text)
+        d.t90_min = _first([rf"SpO2?\s*<\s*90%?\s*\(\s*(\d+[.,]?\d*)\s*min"], text)
+    d.charge_hypoxique = _first([rf"Charge hypoxique{_GAP}{_NUM}\s*%?min", rf"Charge\s+hypoxique[^0-9\n]*{_NUM}"], text)
 
-    m = re.search(r"Fréquence\s+cardiaque\s+moyenne[^0-9\n]*(\d{2,3})", text, re.IGNORECASE)
-    data.fc_moyenne = int(_f(m.group(1))) if m else None
-    m = re.search(r"Fréquence\s+cardiaque\s+maximale[^0-9\n]*(\d{2,3})", text, re.IGNORECASE)
-    data.fc_maximale = int(_f(m.group(1))) if m else None
+    d.activations_autonomiques = _first([rf"Activations autonomiques\s*\(\d+[^)]*\){_GAP}{_NUM}\s*/h", rf"Activations? autonomiques?[^0-9\n]*{_NUM}"], text)
+    m = re.search(r"Eveil\s*\n\s*(\d{1,3})\s*min", text, re.IGNORECASE)
+    d.temps_eveil_min = _f(m.group(1)) if m else None
 
-    m = re.search(r"IMC[^0-9\n]*(\d{2}[.,]\d)", text, re.IGNORECASE)
-    data.imc = _f(m.group(1)) if m else None
-    m = re.search(r"Poids[^0-9\n]*(\d{2,3}[.,]?\d{0,1})", text, re.IGNORECASE)
-    data.poids = _f(m.group(1)) if m else None
-    m = re.search(r"Taille[^0-9\n]*(\d{3})", text, re.IGNORECASE)
-    data.taille = _f(m.group(1)) if m else None
-    m = re.search(r"Epworth[^0-9\n]*(\d{1,2})", text, re.IGNORECASE)
-    data.epworth = int(_f(m.group(1))) if m else None
-    m = re.search(r"Pichot[^0-9\n]*(\d{1,2})", text, re.IGNORECASE)
-    data.pichot = int(_f(m.group(1))) if m else None
+    d.ronflement_pct = _first([rf"Episodes? de ronflements{_GAP}{_NUM}\s*%", rf"Ronflement[^0-9\n]*{_NUM}\s*%"], text)
+    d.ronflement_index = _first([rf"Ronflements uniques\s*\(\d+[^)]*\){_GAP}{_NUM}\s*/h"], text)
+    d.ronflement_dbc_moy = _first([rf"Volume audio moyen{_GAP}{_NUM}\s*dBc?", rf"Ronflement[^0-9\n]*moyen[^0-9\n]*{_NUM}\s*dBc?"], text)
+    d.ronflement_dbc_max = _first([rf"Volume audio maximal{_GAP}{_NUM}\s*dBc?", rf"Ronflement[^0-9\n]*max(?:imal|imum)?[^0-9\n]*{_NUM}\s*dBc?"], text)
+
+    d.fc_moyenne = _first([rf"Pouls moyen{_GAP}{_NUM}\s*bpm", rf"Fr[ée]quence cardiaque moyenne[^0-9\n]*(\d{2,3}[.,]?\d?)"], text)
+    d.fc_maximale = _first([rf"Pouls maximal[^\n]*{_GAP}{_NUM}\s*bpm", rf"Fr[ée]quence cardiaque maximale[^0-9\n]*(\d{2,3})"], text)
+
+    d.position_dorsale_pct = _first([rf"Dorsale{_GAP}\d+[.,]?\d*\s*min{_GAP}{_NUM}\s*%", rf"Décubitus\s*dorsal[^0-9\n]*{_NUM}\s*%"], text)
+
+    d.index_plm = _first([rf"Index\s+(?:PLM| mouvements\s+p[ée]riodiques)[^0-9\n]*{_NUM}", rf"\bPLMS?I?\b[^0-9\n]*{_NUM}"], text)
+    d.index_micro_eveils = _first([rf"Index\s+de\s+micro[\s-]*[ée]veils?[^0-9\n]*{_NUM}", rf"Arousal\s*index\b[^0-9\n]*{_NUM}"], text)
 
     for key, pat in {
-        "apnées obstructives": r"Apnées\s+obstructives[^0-9\n]*(\d{1,4})",
-        "apnées centrales": r"Apnées\s+centrales[^0-9\n]*(\d{1,4})",
-        "apnées mixtes": r"Apnées\s+mixtes[^0-9\n]*(\d{1,4})",
-        "hypopnées": r"Hypopnées[^0-9\n]*(\d{1,4})",
-        "désaturations": r"Désaturations[^0-9\n]*(\d{1,4})",
+        "apnées obstructives": r"Apn[ée]es obstructives\s*\n\s*(\d{1,4})",
+        "apnées centrales": r"Apn[ée]es centrales\s*\n\s*(\d{1,4})",
+        "apnées mixtes": r"Apn[ée]es mixtes\s*\n\s*(\d{1,4})",
+        "hypopnées": r"Hypopn[ée]es\s*\n\s*(\d{1,4})\s+soit",
+        "désaturations": r"Nombre de d[ée]saturations\s*\n\s*(\d{1,4})",
     }.items():
         m = re.search(pat, text, re.IGNORECASE)
         if m:
-            data.evenements_respiratoires[key] = int(m.group(1))
-    return data
+            d.evenements_respiratoires[key] = int(m.group(1))
+    return d
 
 
 def parse_pdf(pdf_path: str | Path) -> PolygraphData:

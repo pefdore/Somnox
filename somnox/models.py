@@ -11,8 +11,10 @@ class PolygraphData:
     """Champs extraits d'un enregistrement de polygraphie ventilatoire."""
 
     patient: str = ""
+    age: str = ""
     date_naissance: str = ""
     date_examen: str = ""
+    indications: str = ""
     poids: Optional[float] = None
     taille: Optional[float] = None
     imc: Optional[float] = None
@@ -47,13 +49,15 @@ class PolygraphData:
     temps_eveil_min: Optional[float] = None
 
     ronflement_pct: Optional[float] = None
+    ronflement_index: Optional[float] = None
     ronflement_dbc_moy: Optional[float] = None
     ronflement_dbc_max: Optional[float] = None
-    fc_moyenne: Optional[int] = None
-    fc_maximale: Optional[int] = None
+    fc_moyenne: Optional[float] = None
+    fc_maximale: Optional[float] = None
 
     position_dorsale_pct: Optional[float] = None
     pichot: Optional[int] = None
+    boss: Optional[int] = None
     evenements_respiratoires: dict = field(default_factory=dict)
     texte_brut: str = ""
     source: str = ""
@@ -78,6 +82,7 @@ class ClinicalContext:
     ronflements_constates: bool = False
     comorbidites: list[str] = field(default_factory=list)
     refus_ppc: bool = False
+    controle_oam: bool = False
     epworth: Optional[int] = None
     boss: Optional[int] = None
     pichot: Optional[int] = None
@@ -113,7 +118,9 @@ COMORBIDITES_UI = (
 
 def default_context(data: PolygraphData) -> ClinicalContext:
     """Pré-remplit le contexte clinique depuis les données extraites du PDF."""
-    ctx = ClinicalContext(epworth=data.epworth, pichot=data.pichot)
+    ctx = ClinicalContext(epworth=data.epworth, pichot=data.pichot, boss=data.boss)
     if data.epworth is not None and data.epworth >= 10:
         ctx.somnolence = True
+    if data.indications and ("oam" in data.indications.lower()):
+        ctx.controle_oam = True
     return ctx
