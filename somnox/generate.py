@@ -104,6 +104,30 @@ def _particularites(data: PolygraphData) -> str:
     return "\n".join(lines) if lines else "- Rien de particulier à signaler."
 
 
+def suivi_oam_lines(ctx: ClinicalContext) -> list[str]:
+    """Lignes de synthèse du suivi OAM (format structuré), pour les gabarits."""
+    if ctx.type_examen != "controle_oam":
+        return []
+    lines = []
+    if ctx.observance_jours_sem is not None or ctx.observance_heures_nuit is not None:
+        parts = []
+        if ctx.observance_jours_sem is not None:
+            parts.append(f"{ctx.observance_jours_sem} j/sem")
+        if ctx.observance_heures_nuit is not None:
+            parts.append(f"{ctx.observance_heures_nuit:g} h/nuit")
+        lines.append("Observance : " + ", ".join(parts))
+    if ctx.tolerance_oam:
+        lines.append(f"Tolérance : {ctx.tolerance_oam}")
+    if ctx.reglage_oam_mm is not None:
+        aug = f" (+{ctx.reglage_augmentation_mm:g} mm depuis la pose)" if ctx.reglage_augmentation_mm is not None else ""
+        lines.append(f"Réglage actuel : {ctx.reglage_oam_mm:g} mm{aug}")
+    if ctx.efficacite_clinique:
+        lines.append(f"Efficacité clinique : {ctx.efficacite_clinique}")
+    if ctx.indication_controle_oam is not None:
+        lines.append(f"Indication PGV de contrôle sous OAM : {'Oui' if ctx.indication_controle_oam else 'Non (réglage à poursuivre)'}")
+    return lines
+
+
 def context(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | None = None, medecin: str = "") -> dict:
     ctx = ctx or default_context(data)
     return {
@@ -138,6 +162,7 @@ def context(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | Non
         "vigilance_immédiat": [v["texte"] for v in res.vigilance if v["horizon"] == "immédiat"],
         "vigilance_terme": [v["texte"] for v in res.vigilance if v["horizon"] == "à terme"],
         "diagnostics_differentiels": res.diagnostics_differentiels,
+        "suivi_oam": suivi_oam_lines(ctx),
         "bilan_complementaire": res.bilan_complementaire,
         "checklist": res.checklist,
         "odi": _fmt(data.index_desat),

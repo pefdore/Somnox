@@ -486,6 +486,10 @@ def _comparaison_traitement(data: PolygraphData, ctx: ClinicalContext, res: Anal
             f"({sens} de {abs(variation):.0f} %)"
             + (f", IDO {data.odi_pre_traitement:g} → {data.index_desat:g}/h." if data.odi_pre_traitement is not None and data.index_desat is not None else ".")
         )
+        if data.t90_pre_traitement is not None and data.t90 is not None:
+            res.interpretation.append(f"T90 {data.t90_pre_traitement:g} → {data.t90:g} %.")
+        if data.spo2_min_pre_traitement is not None and data.spo2_minimale is not None:
+            res.interpretation.append(f"SpO2 minimale {data.spo2_min_pre_traitement:g} → {data.spo2_minimale:g} %.")
         if abs(variation) < 25:
             _vigilance(res, "immédiat",
                        f"Variation d'IAH faible sous traitement ({variation:+.0f} %) : vérifier "
@@ -495,6 +499,43 @@ def _comparaison_traitement(data: PolygraphData, ctx: ClinicalContext, res: Anal
         _vigilance(res, "immédiat",
                    "Valeurs pré-traitement non retrouvées dans les Indications : pour un contrôle, "
                    "documenter l'IAH/IDO de référence pour objectiver l'évolution.")
+
+    # Scores pré -> post
+    if ctx.epworth_pre is not None and ctx.epworth is not None:
+        res.interpretation.append(f"Epworth {ctx.epworth_pre} → {ctx.epworth}/24 sous traitement.")
+    if ctx.pichot_pre is not None and ctx.pichot is not None:
+        res.interpretation.append(f"Pichot {ctx.pichot_pre} → {ctx.pichot}/32 sous traitement.")
+    if ctx.boss_pre is not None and ctx.boss is not None:
+        res.interpretation.append(f"BOSS {ctx.boss_pre} → {ctx.boss}/8 sous traitement.")
+
+    # Suivi OAM structuré
+    if ctx.type_examen == "controle_oam":
+        if ctx.observance_heures_nuit is not None and ctx.observance_heures_nuit < 4:
+            _vigilance(res, "immédiat",
+                       f"Observance OAM insuffisante ({ctx.observance_heures_nuit:g} h/nuit < 4 h) : "
+                       "optimiser le port (confort, habitude, motivation) avant de juger l'efficacité "
+                       "polygraphique.")
+        if ctx.tolerance_oam and ("atm" in ctx.tolerance_oam.lower() or "dentaire" in ctx.tolerance_oam.lower() or "douleur" in ctx.tolerance_oam.lower()):
+            _alerte(res, "attention", "Intolérance OAM",
+                    f"Tolérance : {ctx.tolerance_oam} — avis dentaire à prévoir (ATM/occlusion) "
+                    "avant toute avancée supplémentaire.")
+        if ctx.reglage_oam_mm is not None and data.iah is not None and data.iah >= SEUIL_MODERES and (ctx.reglage_augmentation_mm or 0) < 1:
+            res.recommandations.append(
+                f"IAH résiduel ≥ 15/h avec réglage modeste ({ctx.reglage_oam_mm:g} mm, "
+                f"+{ctx.reglage_augmentation_mm or 0:g} mm depuis la pose) : envisager une avancée "
+                "mandibulaire supplémentaire progressive avant de conclure à l'échec."
+            )
+        if ctx.efficacite_clinique:
+            iah_ok = data.iah is not None and data.iah < SEUIL_MODERES
+            if ctx.efficacite_clinique == "nulle" and iah_ok:
+                _vigilance(res, "immédiat",
+                           "Discordance : efficacité clinique jugée nulle alors que l'IAH résiduel est "
+                           "< 15/h — rechercher une autre cause de symptômes (somnolence non liée au "
+                           "SAHOS, see guide : différentiels).")
+            if ctx.efficacite_clinique == "complète" and data.iah is not None and data.iah >= SEUIL_MODERES:
+                _vigilance(res, "immédiat",
+                           f"Discordance : efficacité clinique jugée complète alors que l'IAH résiduel est "
+                           f"à {data.iah:g}/h (≥ 15/h) — poursuivre l'optimisation, ne pas conclure à l'efficacité.")
     res.checklist.append(
         "Contrôle sous traitement : ne pas re-chercher les symptômes initiaux mais évaluer les "
         "symptômes SOUS traitement (Epworth/Pichot/BOSS actuels vs initiaux)."

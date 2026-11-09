@@ -65,6 +65,8 @@ class PolygraphData:
     pichot: Optional[int] = None
     iah_pre_traitement: Optional[float] = None
     odi_pre_traitement: Optional[float] = None
+    t90_pre_traitement: Optional[float] = None
+    spo2_min_pre_traitement: Optional[float] = None
     duree_rem_min: Optional[float] = None
     duree_nrem_min: Optional[float] = None
     boss: Optional[int] = None
@@ -97,7 +99,20 @@ class ClinicalContext:
     epworth: Optional[int] = None
     boss: Optional[int] = None
     pichot: Optional[int] = None
+    epworth_pre: Optional[int] = None
+    boss_pre: Optional[int] = None
+    pichot_pre: Optional[int] = None
     notes: str = ""
+    observance_jours_sem: Optional[int] = None
+    observance_heures_nuit: Optional[float] = None
+    tolerance_oam: str = ""
+    reglage_oam_mm: Optional[float] = None
+    reglage_augmentation_mm: Optional[float] = None
+    efficacite_clinique: str = ""
+    indication_controle_oam: Optional[bool] = None
+    ronflements_doute: bool = False
+    fatigue_parfois: bool = False
+    nycturie_fois: Optional[int] = None
 
     @property
     def somnolence_positive(self) -> bool:

@@ -7,6 +7,12 @@ Fiabilité : {{ fiabilite }}
 Données non extractibles : {{ donnees_manquantes|join(', ') }} — à vérifier sur le PDF source.
 {% endif %}
 
+{% if suivi_oam %}
+SUIVI OAM (4 MOIS)
+{% for l in suivi_oam %}
+- {{ l }}
+{% endfor %}
+{% endif %}
 PROPOSITION (conditions de remboursement)
 {{ proposition }}
 

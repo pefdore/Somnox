@@ -145,6 +145,29 @@ def _list_html(items) -> str:
     return "".join(f"<li style='margin:3px 0;'>{i}</li>" for i in items)
 
 
+def _suivi_oam_html(ctx: ClinicalContext) -> str:
+    rows = []
+    if ctx.observance_jours_sem is not None or ctx.observance_heures_nuit is not None:
+        obs = "Observance : "
+        if ctx.observance_jours_sem is not None:
+            obs += f"<b>{ctx.observance_jours_sem} j/sem</b>"
+        if ctx.observance_heures_nuit is not None:
+            obs += f", <b>{ctx.observance_heures_nuit:g} h/nuit</b>"
+        rows.append(obs)
+    if ctx.tolerance_oam:
+        rows.append(f"Tolérance : <b>{ctx.tolerance_oam}</b>")
+    if ctx.reglage_oam_mm is not None:
+        aug = f" (+{ctx.reglage_augmentation_mm:g} mm depuis la pose)" if ctx.reglage_augmentation_mm is not None else ""
+        rows.append(f"Réglage actuel : <b>{ctx.reglage_oam_mm:g} mm</b>{aug}")
+    if ctx.nycturie_fois is not None:
+        rows.append(f"Nycturie : <b>{ctx.nycturie_fois} fois</b>")
+    if ctx.efficacite_clinique:
+        rows.append(f"Efficacité clinique : <b>{ctx.efficacite_clinique}</b>")
+    if ctx.indication_controle_oam is not None:
+        rows.append(f"Indication PGV de contrôle sous OAM : <b>{'Oui' if ctx.indication_controle_oam else 'Non (réglage à poursuivre)'}</b>")
+    return _card("<div style='display:grid;'>" + "<br>".join(rows) + "</div>")
+
+
 def memo_html(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | None = None) -> str:
     ctx = ctx or ClinicalContext(epworth=data.epworth, pichot=data.pichot, boss=data.boss)
     vig_imm = [v["texte"] for v in res.vigilance if v["horizon"] == "immédiat"]
@@ -156,6 +179,8 @@ def memo_html(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | N
         f"<b>{TYPE_EXAMEN_LABELS.get(ctx.type_examen, '')}</b> &nbsp;·&nbsp; {res.fiabilite}</p>",
         _severity_banner(res.severite, data.iah),
         _section("Scores cliniques", "&#128202;", _score_chips(ctx, data)),
+        *([] if ctx.type_examen != "controle_oam" or ctx.observance_heures_nuit is None and not ctx.tolerance_oam and ctx.reglage_oam_mm is None and not ctx.efficacite_clinique
+           else [_section("Suivi OAM (4 mois)", "&#128367;&#65039;", _suivi_oam_html(ctx))]),
         _section("Métriques", "&#128200;", _metrics(data)),
         _section("Checklist avant validation — étape par étape", "&#9989;", _steps_html(res.checklist)),
         _section("Vigilance immédiate", "&#9888;&#65039;", _card(_list_html(vig_imm), "#FCEBE9", "#F3B8B2"),
