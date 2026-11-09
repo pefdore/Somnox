@@ -128,6 +128,16 @@ def suivi_oam_lines(ctx: ClinicalContext) -> list[str]:
     return lines
 
 
+def _grade_charge(v):
+    if v is None:
+        return ""
+    if v < 20:
+        return "faible"
+    if v < 50:
+        return "notable"
+    return "élevée"
+
+
 def context(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | None = None, medecin: str = "") -> dict:
     ctx = ctx or default_context(data)
     return {
@@ -173,6 +183,7 @@ def context(data: PolygraphData, res: AnalysisResult, ctx: ClinicalContext | Non
         "t90": _fmt(data.t90),
         "t90_min": _fmt(data.t90_min, "—") if data.t90_min is None else _fmt(data.t90_min),
         "charge_hypoxique": _fmt(data.charge_hypoxique, "—") if data.charge_hypoxique is None else _fmt(data.charge_hypoxique),
+        "charge_hypoxique_grade": _grade_charge(data.charge_hypoxique),
         "ronflement": _fmt(data.ronflement_pct),
         "dbc_moy": _fmt(data.ronflement_dbc_moy, "—") if data.ronflement_dbc_moy is None else _fmt(data.ronflement_dbc_moy),
         "dbc_max": _fmt(data.ronflement_dbc_max, "—") if data.ronflement_dbc_max is None else _fmt(data.ronflement_dbc_max),

@@ -387,27 +387,69 @@ def _therapeutique(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResul
     comorb = bool(ctx.comorbidites)
 
     if ctx.type_examen == "controle_oam":
-        if iah < SEUIL_MODERES:
-            res.proposition_therapeutique = (
-                f"Contrôle sous OAM à 4 mois : efficacité confirmée (IAH résiduel à {iah:g}/h, "
-                "< 15/h). Poursuite de l'OAM."
-            )
-        elif iah < SEUIL_SEVERES:
-            base = (
-                f"Contrôle sous OAM à 4 mois : réponse insuffisante (IAH résiduel à {iah:g}/h, "
-                "≥ 15/h) — vérifier calage dentaire, observance et avancée mandibulaire ; "
-            )
-            if comorb:
-                base += ("en cas d'échec, bascule vers la PPC (prise en charge possible : "
-                         f"IAH ≥ 15/h avec comorbidités : {', '.join(ctx.comorbidites)}).")
+        critere_txt = ("Une OAM est jugée efficace lorsque l'IAH est abaissé d'au moins 50 % "
+                        "et un IAH absolu de moins de 15, voire 10/h")
+        if data.iah_pre_traitement:
+            reduction = (data.iah_pre_traitement - iah) / data.iah_pre_traitement * 100
+            red_txt = f"{reduction:.1f}".replace(".", ",")
+            if reduction >= 50 and iah < 10:
+                res.proposition_therapeutique = (
+                    f"Contrôle sous OAM à 4 mois : efficacité complète confirmée (IAH résiduel à "
+                    f"{iah:g}/h, < 10/h, diminué de {red_txt} % par rapport à l'IAH initial). "
+                    "Poursuite de l'OAM."
+                )
+            elif reduction >= 50 and iah < SEUIL_MODERES:
+                res.proposition_therapeutique = (
+                    f"Contrôle sous OAM à 4 mois : efficacité confirmée (IAH résiduel à {iah:g}/h, "
+                    f"< 15/h, diminué de {red_txt} % par rapport à l'IAH initial). Poursuite de l'OAM."
+                )
+            elif iah < SEUIL_MODERES:
+                res.proposition_therapeutique = (
+                    f"Contrôle sous OAM à 4 mois : efficacité partielle confirmée (IAH résiduel à "
+                    f"{iah:g}/h, < 15/h mais l'IAH n'est diminué que de {red_txt} % par rapport à "
+                    f"l'IAH initial. {critere_txt}). Poursuite de l'OAM avec augmentation de l'avancée "
+                    "jusqu'à l'avancée max tolérable."
+                )
+            elif iah < SEUIL_SEVERES:
+                base = (
+                    f"Contrôle sous OAM à 4 mois : réponse insuffisante (IAH résiduel à {iah:g}/h, "
+                    f"≥ 15/h ; diminution de {red_txt} % par rapport à l'IAH initial. {critere_txt}) — "
+                    "vérifier calage dentaire, observance et avancée mandibulaire ; "
+                )
+                if comorb:
+                    base += ("en cas d'échec, bascule vers la PPC (prise en charge possible : "
+                             f"IAH ≥ 15/h avec comorbidités : {', '.join(ctx.comorbidites)}).")
+                else:
+                    base += "en cas d'échec, réévaluer les options (PPC non prise en charge sans comorbidité à ce stade)."
+                res.proposition_therapeutique = base
             else:
-                base += "en cas d'échec, réévaluer les options (PPC non prise en charge sans comorbidité à ce stade)."
-            res.proposition_therapeutique = base
+                res.proposition_therapeutique = (
+                    f"Contrôle sous OAM à 4 mois : échec (IAH résiduel à {iah:g}/h, ≥ 30/h, "
+                    f"diminution de {red_txt} % par rapport à l'IAH initial) — bascule vers la PPC "
+                    "(prise en charge due, IAH ≥ 30/h avec ou sans comorbidités)."
+                )
         else:
-            res.proposition_therapeutique = (
-                f"Contrôle sous OAM à 4 mois : échec (IAH résiduel à {iah:g}/h, ≥ 30/h) — "
-                "bascule vers la PPC (prise en charge due, IAH ≥ 30/h avec ou sans comorbidités)."
-            )
+            if iah < SEUIL_MODERES:
+                res.proposition_therapeutique = (
+                    f"Contrôle sous OAM à 4 mois : efficacité confirmée (IAH résiduel à {iah:g}/h, "
+                    "< 15/h). Poursuite de l'OAM."
+                )
+            elif iah < SEUIL_SEVERES:
+                base = (
+                    f"Contrôle sous OAM à 4 mois : réponse insuffisante (IAH résiduel à {iah:g}/h, "
+                    "≥ 15/h) — vérifier calage dentaire, observance et avancée mandibulaire ; "
+                )
+                if comorb:
+                    base += ("en cas d'échec, bascule vers la PPC (prise en charge possible : "
+                             f"IAH ≥ 15/h avec comorbidités : {', '.join(ctx.comorbidites)}).")
+                else:
+                    base += "en cas d'échec, réévaluer les options (PPC non prise en charge sans comorbidité à ce stade)."
+                res.proposition_therapeutique = base
+            else:
+                res.proposition_therapeutique = (
+                    f"Contrôle sous OAM à 4 mois : échec (IAH résiduel à {iah:g}/h, ≥ 30/h) — "
+                    "bascule vers la PPC (prise en charge due, IAH ≥ 30/h avec ou sans comorbidités)."
+                )
     elif ctx.type_examen == "controle_ppc":
         if iah < SEUIL_MODERES:
             res.proposition_therapeutique = (
@@ -479,8 +521,11 @@ def _therapeutique(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResul
 
     # Suivi
     if ctx.type_examen == "controle_oam":
-        if "efficacité confirmée" in res.proposition_therapeutique:
-            res.suivi.append("OAM efficace : poursuite ; contrôle à 12 mois ou si aggravation symptomatique.")
+        prop = res.proposition_therapeutique
+        if "efficacité complète" in prop or ("efficacité confirmée" in prop and "partielle" not in prop):
+            res.suivi.append("Efficacité confirmée : poursuite de l'OAM ; le prochain renouvellement de l'OAM aura lieu dans 5 ans.")
+        elif "efficacité partielle" in prop:
+            res.suivi.append("OAM partiellement efficace : le prochain renouvellement de l'OAM aura lieu dans 5 ans, avec optimisation de l'avancée mandibulaire (contrôle clinique/odontologique à prévoir).")
         else:
             res.suivi.append("Nouveau contrôle polygraphique après optimisation de l'OAM (calage/avancée mandibulaire).")
     elif ctx.type_examen == "controle_ppc":
