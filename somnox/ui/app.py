@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -16,8 +17,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSplitter,
     QStatusBar,
     QTabWidget,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -25,10 +29,88 @@ from PySide6.QtWidgets import (
 from .. import watcher
 from ..analysis import AnalysisResult, analyse
 from ..generate import DOCS, generate_all
-from ..models import PolygraphData
+from ..guide import guide_html
+from ..report_html import alertes_html, memo_html, text_to_html
+from ..context import build_context
+from ..models import COMORBIDITES_UI, SYMPTOMES_UI, TYPE_EXAMEN_LABELS, ClinicalContext, PolygraphData
 from ..parser import parse_pdf
 
 THEME = Path(__file__).parent.parent / "theme.qss"
+
+
+class PdfPreview(QScrollArea):
+    """Aperçu PDF : pages toujours ajustées à la largeur de la zone, zoom molette Ctrl + pinch."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWidgetResizable(True)
+        self._zoom = 1.0
+        self._pixmaps: list = []
+        self._labels: list[QLabel] = []
+        self.pages = QWidget()
+        self._layout = QVBoxLayout(self.pages)
+        self._layout.setSpacing(12)
+        self._layout.addStretch(1)
+        self.setWidget(self.pages)
+        self.viewport().installEventFilter(self)
+        self.grabGesture(Qt.PinchGesture)
+
+    def clear(self) -> None:
+        self._pixmaps.clear()
+        self._labels.clear()
+        while self._layout.count() > 1:
+            item = self._layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def load(self, path: str) -> None:
+        import pymupdf
+
+        self.clear()
+        try:
+            doc = pymupdf.open(path)
+        except Exception as exc:
+            self._layout.insertWidget(0, QLabel(f"Erreur : {exc}"))
+            return
+        for page in doc:
+            pix = page.get_pixmap(dpi=200)
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+            self._pixmaps.append(QPixmap.fromImage(img))
+            lbl = QLabel()
+            lbl.setAlignment(Qt.AlignCenter)
+            self._labels.append(lbl)
+            self._layout.insertWidget(self._layout.count() - 1, lbl)
+        doc.close()
+        self.rescale()
+
+    def rescale(self) -> None:
+        if not self._pixmaps:
+            return
+        width = max(int((self.viewport().width() - 24) * self._zoom), 100)
+        for pm, lbl in zip(self._pixmaps, self._labels):
+            lbl.setPixmap(pm.scaledToWidth(width, Qt.SmoothTransformation))
+        self.pages.adjustSize()
+
+    def eventFilter(self, obj, event):
+        if obj is self.viewport() and event.type() == event.Type.Resize:
+            self.rescale()
+        return super().eventFilter(obj, event)
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            self._zoom = max(0.3, min(5.0, self._zoom * (1.1 if event.angleDelta().y() > 0 else 0.9)))
+            self.rescale()
+        else:
+            super().wheelEvent(event)
+
+    def event(self, event):
+        if event.type() == event.Type.Gesture:
+            gesture = event.gesture(Qt.PinchGesture)
+            if gesture:
+                self._zoom = max(0.3, min(5.0, self._zoom * gesture.scaleFactor()))
+                self.rescale()
+                return True
+        return super().event(event)
 
 
 class MainWindow(QMainWindow):
@@ -39,7 +121,9 @@ class MainWindow(QMainWindow):
         self.data: PolygraphData | None = None
         self.result: AnalysisResult | None = None
         self.observer = None
+        self.pdf_path: str | None = None
         self._build_ui()
+        self._build_context_inputs()
         if watch_dir:
             self._start_watch(watch_dir)
 
@@ -48,12 +132,13 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(root)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
+        self._root_layout = layout
 
         hero = QFrame(objectName="hero")
         hero_layout = QHBoxLayout(hero)
         hero_layout.setContentsMargins(28, 24, 28, 24)
         title = QLabel("Somnox", objectName="appTitle")
-        subtitle = QLabel("Polygraphie ventilatoire — lecture OCR & analyse experte hors ligne")
+        subtitle = QLabel("Polygraphie ventilatoire — lecture OCR & analyse experte hors ligne", objectName="heroSubtitle")
         subtitle.setContentsMargins(12, 0, 0, 0)
         hero_layout.addWidget(title)
         hero_layout.addWidget(subtitle, stretch=1)
@@ -75,7 +160,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(actions)
 
         self.tabs = QTabWidget()
-        self.editors: dict[str, QPlainTextEdit] = {}
+        self.editors: dict[str, QWidget] = {}
         titles = {
             "compte_rendu": "Compte rendu",
             "memo": "Mémo praticien",
@@ -83,16 +168,121 @@ class MainWindow(QMainWindow):
             "courrier": "Courrier MT",
         }
         for doc in DOCS:
-            edit = QPlainTextEdit()
-            edit.setReadOnly(True)
+            edit = QTextBrowser()
+            edit.setOpenExternalLinks(False)
             self.editors[doc] = edit
             self.tabs.addTab(edit, titles[doc])
+        guide = QTextBrowser()
+        guide.setOpenExternalLinks(True)
+        guide.setHtml(guide_html())
+        self.tabs.addTab(guide, "Guide d'interprétation")
         layout.addWidget(self.tabs, stretch=1)
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
         self.status.showMessage("Prêt — aucun examen chargé.")
-        self.setCentralWidget(root)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(root)
+        splitter.addWidget(self._build_preview())
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([3000, 1000])
+        self.setCentralWidget(splitter)
+
+    def _build_preview(self) -> QWidget:
+        """Panneau droit : aperçu du PDF importé (25 % de la largeur, zoomable)."""
+        panel = QFrame(objectName="previewPanel")
+        box = QVBoxLayout(panel)
+        box.setContentsMargins(8, 8, 8, 8)
+        box.setSpacing(6)
+        header = QLabel("PDF importé — Ctrl+molette / pinch pour zoomer", objectName="previewTitle")
+        header.setWordWrap(True)
+        self.preview_name = QLabel("Aucun document")
+        self.preview_name.setWordWrap(True)
+        self.preview = PdfPreview()
+        box.addWidget(header)
+        box.addWidget(self.preview_name)
+        box.addWidget(self.preview, stretch=1)
+        return panel
+
+    def _show_pdf(self, path: str) -> None:
+        self.preview_name.setText(Path(path).name)
+        self.preview.load(path)
+
+    def _build_context_inputs(self):
+        """Panneau de contexte clinique : symptômes, comorbidités, BOSS, Epworth."""
+        from PySide6.QtWidgets import QCheckBox, QComboBox, QGroupBox, QSpinBox
+
+        self.ctx_group = QGroupBox("Contexte clinique — pré-rempli depuis les Indications, ajustable")
+        grid = QHBoxLayout(self.ctx_group)
+
+        type_box = QVBoxLayout()
+        self.combo_type = QComboBox()
+        self.combo_type.addItems(list(TYPE_EXAMEN_LABELS.values()))
+        type_box.addWidget(QLabel("Type d'examen :"))
+        type_box.addWidget(self.combo_type)
+        type_box.addStretch(1)
+        grid.addLayout(type_box)
+
+        sympt_box = QVBoxLayout()
+        self.chk_sympt = {}
+        for key, label in SYMPTOMES_UI.items():
+            cb = QCheckBox(label)
+            self.chk_sympt[key] = cb
+            sympt_box.addWidget(cb)
+
+        comorb_box = QVBoxLayout()
+        self.chk_comorb = {}
+        for label in COMORBIDITES_UI:
+            cb = QCheckBox(label)
+            self.chk_comorb[label] = cb
+            comorb_box.addWidget(cb)
+
+        scores = QVBoxLayout()
+        self.spin_epworth = QSpinBox(); self.spin_epworth.setRange(0, 24); self.spin_epworth.setSpecialValueText("Epworth —")
+        self.spin_boss = QSpinBox(); self.spin_boss.setRange(0, 10); self.spin_boss.setSpecialValueText("BOSS —")
+        self.spin_pichot = QSpinBox(); self.spin_pichot.setRange(0, 40); self.spin_pichot.setSpecialValueText("Pichot —")
+        self.chk_refus_ppc = QCheckBox("Refus de la PPC")
+        for w in (self.spin_epworth, self.spin_boss, self.spin_pichot, self.chk_refus_ppc):
+            scores.addWidget(w)
+
+        grid.addLayout(sympt_box)
+        grid.addLayout(comorb_box)
+        grid.addLayout(scores)
+        self._root_layout.insertWidget(2, self.ctx_group)
+
+    def _current_context(self) -> ClinicalContext:
+        epworth = self.spin_epworth.value() if self.spin_epworth.value() > 0 else None
+        boss = self.spin_boss.value() if self.spin_boss.value() > 0 else None
+        pichot = self.spin_pichot.value() if self.spin_pichot.value() > 0 else None
+        type_key = next(
+            (k for k, lbl in TYPE_EXAMEN_LABELS.items() if lbl == self.combo_type.currentText()),
+            "primo",
+        )
+        return ClinicalContext(
+            epworth=epworth,
+            boss=boss,
+            pichot=pichot,
+            type_examen=type_key,
+            comorbidites=[k for k, cb in self.chk_comorb.items() if cb.isChecked()],
+            refus_ppc=self.chk_refus_ppc.isChecked(),
+            **{k: cb.isChecked() for k, cb in self.chk_sympt.items()},
+        )
+
+    def _prefill_context(self, ctx: ClinicalContext) -> None:
+        """Pré-remplit le panneau avec le contexte extrait des Indications."""
+        self.combo_type.setCurrentText(TYPE_EXAMEN_LABELS.get(ctx.type_examen, TYPE_EXAMEN_LABELS["primo"]))
+        if ctx.epworth is not None:
+            self.spin_epworth.setValue(ctx.epworth)
+        if ctx.boss is not None:
+            self.spin_boss.setValue(ctx.boss)
+        if ctx.pichot is not None:
+            self.spin_pichot.setValue(ctx.pichot)
+        for key, cb in self.chk_sympt.items():
+            cb.setChecked(getattr(ctx, key, False))
+        for label, cb in self.chk_comorb.items():
+            cb.setChecked(label in ctx.comorbidites)
 
     # ---------------------------------------------------------------- actions
 
@@ -102,10 +292,13 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        self.pdf_path = path
+        self._show_pdf(path)
         self.status.showMessage(f"Lecture : {Path(path).name} …")
         try:
             self.data = parse_pdf(path)
-            self.result = analyse(self.data)
+            self._prefill_context(build_context(self.data))
+            self.result = analyse(self.data, self._current_context())
             self._display()
         except Exception as exc:
             QMessageBox.critical(self, "Erreur", f"Échec de l'import :\n{exc}")
@@ -135,7 +328,7 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Dossier d'export")
         if not folder:
             return
-        outputs = generate_all(self.data, self.result, folder)
+        outputs = generate_all(self.data, self.result, folder, self._current_context())
         self.status.showMessage(f"Documents générés dans {folder}")
         QMessageBox.information(
             self, "Export", "\n".join(p["docx"] for p in outputs.values())
@@ -147,12 +340,19 @@ class MainWindow(QMainWindow):
         from ..generate import render
 
         assert self.data and self.result
+        self.result = analyse(self.data, self._current_context())
         self.severity.setText(self.result.severite)
         self.severity.setProperty("sev", self.result.severite)
         self.severity.style().unpolish(self.severity)
         self.severity.style().polish(self.severity)
+        ctx = self._current_context()
         for doc in DOCS:
-            self.editors[doc].setPlainText(render(doc, self.data, self.result))
+            if doc == "memo":
+                self.editors[doc].setHtml(memo_html(self.data, self.result, ctx))
+            elif doc == "alertes":
+                self.editors[doc].setHtml(alertes_html(self.data, self.result, ctx))
+            else:
+                self.editors[doc].setHtml(text_to_html(render(doc, self.data, self.result, ctx)))
         self.status.showMessage(
             f"Examen chargé ({self.data.methode_extraction}) — {self.data.patient or 'patient inconnu'}"
         )

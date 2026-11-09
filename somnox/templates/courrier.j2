@@ -3,18 +3,23 @@ Cher Confrère,
 Je vous informe des résultats de la polygraphie ventilatoire réalisée chez votre patient(e) {{ patient }} le {{ date_examen }}.
 
 RÉSULTATS PRINCIPAUX
-- Indice d'apnées-hypopnées : {{ iah }}/h
+- Indice d'apnées-hypopnées : {{ iah }}/h ({{ predominance }})
 - Index de désaturation : {{ odi }}/h ; SpO2 minimale : {{ spo2_min }} %
 - Temps passé sous 90 % de saturation : {{ t90 }} %
 
 INTERPRÉTATION
-{{ conclusion }}
+{{ severite }} — {{ dependance_positionnelle }}
 {{ fiabilite }}
 
 CONDUITE À TENIR
-{% for r in recommandations %}
-- {{ r }}
+- {{ proposition }}
+{% for m in mesures %}
+- {{ m }}
 {% endfor %}
+{% if rappel_arrete %}
+
+Rappel réglementaire : {{ rappel_arrete }}
+{% endif %}
 
 Je reste à votre disposition pour tout complément et assure le suivi dans le cadre de la consultation de médecine du sommeil.
 
