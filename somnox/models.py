@@ -62,6 +62,10 @@ class PolygraphData:
 
     position_dorsale_pct: Optional[float] = None
     pichot: Optional[int] = None
+    iah_pre_traitement: Optional[float] = None
+    odi_pre_traitement: Optional[float] = None
+    duree_rem_min: Optional[float] = None
+    duree_nrem_min: Optional[float] = None
     boss: Optional[int] = None
     evenements_respiratoires: dict = field(default_factory=dict)
     texte_brut: str = ""

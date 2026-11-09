@@ -19,6 +19,34 @@ _NIVEAUX = {
 }
 
 
+DOC_CSS = (
+    "font-family:'Segoe UI',Roboto,sans-serif;font-size:14px;color:#1D1B20;line-height:1.6;"
+)
+
+
+def text_to_html(text: str) -> str:
+    """Convertit le texte d'un document (compte rendu, courrier) en HTML stylé."""
+    import html as _html
+    import re
+
+    out = [f"<div style='{DOC_CSS}'>"]
+    for line in text.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        esc = _html.escape(line)
+        if re.match(r"^\d+\.\s+[A-ZÉÈÀ]", line):
+            out.append(f"<h3 style='color:#6750A4;margin:14px 0 4px 0;'>{esc}</h3>")
+        elif line.startswith("- "):
+            out.append(f"<li style='margin:2px 0;'>{_html.escape(line[2:])}</li>")
+        elif line.isupper() and len(line) > 3:
+            out.append(f"<h2 style='color:#4F378B;margin:12px 0 4px 0;'>{_html.escape(line.title())}</h2>")
+        else:
+            out.append(f"<p style='margin:4px 0;'>{esc}</p>")
+    out.append("</div>")
+    return "".join(out)
+
+
 def _chip(label: str, value: str, color: str = "#4F378B", bg: str = "#EADDFF") -> str:
     return (
         f"<span style='display:inline-block;background:{bg};color:{color};"

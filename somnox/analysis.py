@@ -196,6 +196,27 @@ def _phenotype(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResult) -
                 "d'apnées centrales émergentes sous PPC).")
         res.bilan_complementaire.append("Bilan cardiologique si prédominance centrale : ECG/ETT, BNP, recherche d'insuffisance cardiaque ou d'ACFA.")
         res.recommandations.append("Avis spécialisé avant PPC si prédominance centrale confirmée.")
+        res.checklist.append(
+            "Apnées centrales détectées : lancer l'analyse « respiration de Cheyne-Stokes » dans "
+            "Nox Journal (elle n'est PAS automatique) avant de conclure — et vérifier le tracé "
+            "sur la fenêtre correspondante."
+        )
+        if data.cheyne_stokes_min is None:
+            res.checklist.append(
+                "Durée Cheyne-Stokes non extractible : soit l'analyse n'a pas été lancée, soit le "
+                "rapport est antérieur — relancer l'analyse Cheyne-Stokes dans Nox Journal."
+            )
+
+    # Stades de sommeil : l'analyse Nox Body Sleep a-t-elle été exécutée ?
+    if data.duree_rem_min is None:
+        _vigilance(res, "immédiat",
+                   "Stades de sommeil non détectés dans le rapport : l'analyse Nox Body Sleep "
+                   "(éveil/NREM/REM) n'a probablement pas été exécutée — la lancer pour préciser "
+                   "l'IAH REM, la fragmentation et le temps de sommeil avant conclusion.")
+    elif data.duree_rem_min < 30:
+        _vigilance(res, "immédiat",
+                   f"Temps de REM insuffisant ({data.duree_rem_min:g} min < 30 min) : interpréter "
+                   "l'IAH REM avec prudence (SAHOS REM possiblement sous-estimé).")
 
     if data.cheyne_stokes_min is not None and data.cheyne_stokes_min > 0:
         _alerte(res, "critique", "Respiration de Cheyne-Stokes",
@@ -427,6 +448,33 @@ def _therapeutique(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResul
 
 # ------------------------------------------------------------------ vigilance
 
+def _comparaison_traitement(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResult) -> None:
+    """Contrôle sous traitement : comparaison pré/post et cohérence de la démarche."""
+    if ctx.type_examen == "primo":
+        return
+    if data.iah is not None and data.iah_pre_traitement is not None:
+        variation = (data.iah - data.iah_pre_traitement) / data.iah_pre_traitement * 100 if data.iah_pre_traitement else 0
+        sens = "diminution" if variation < 0 else "augmentation"
+        res.interpretation.append(
+            f"Comparaison pré/post-traitement : IAH {data.iah_pre_traitement:g} → {data.iah:g}/h "
+            f"({sens} de {abs(variation):.0f} %)"
+            + (f", IDO {data.odi_pre_traitement:g} → {data.index_desat:g}/h." if data.odi_pre_traitement is not None and data.index_desat is not None else ".")
+        )
+        if abs(variation) < 25:
+            _vigilance(res, "immédiat",
+                       f"Variation d'IAH faible sous traitement ({variation:+.0f} %) : vérifier "
+                       "l'observance (OAM : avancée mandibulaire suffisante ? PPC : masque/pression ?) "
+                       "avant de conclure à l'efficacité.")
+    else:
+        _vigilance(res, "immédiat",
+                   "Valeurs pré-traitement non retrouvées dans les Indications : pour un contrôle, "
+                   "documenter l'IAH/IDO de référence pour objectiver l'évolution.")
+    res.checklist.append(
+        "Contrôle sous traitement : ne pas re-chercher les symptômes initiaux mais évaluer les "
+        "symptômes SOUS traitement (Epworth/Pichot/BOSS actuels vs initiaux)."
+    )
+
+
 def _vigilance_globale(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResult) -> None:
     if not ctx.comorbidites:
         _vigilance(res, "immédiat",
@@ -457,5 +505,6 @@ def analyse(data: PolygraphData, ctx: ClinicalContext | None = None) -> Analysis
         _retentissement(data, ctx, res)
     _somnolence(data, ctx, res)
     _therapeutique(data, ctx, res)
+    _comparaison_traitement(data, ctx, res)
     _vigilance_globale(data, ctx, res)
     return res

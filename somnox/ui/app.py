@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 from .. import watcher
 from ..analysis import AnalysisResult, analyse
 from ..generate import DOCS, generate_all
-from ..report_html import alertes_html, memo_html
+from ..guide import guide_html
+from ..report_html import alertes_html, memo_html, text_to_html
 from ..context import build_context
 from ..models import COMORBIDITES_UI, SYMPTOMES_UI, TYPE_EXAMEN_LABELS, ClinicalContext, PolygraphData
 from ..parser import parse_pdf
@@ -137,7 +138,7 @@ class MainWindow(QMainWindow):
         hero_layout = QHBoxLayout(hero)
         hero_layout.setContentsMargins(28, 24, 28, 24)
         title = QLabel("Somnox", objectName="appTitle")
-        subtitle = QLabel("Polygraphie ventilatoire — lecture OCR & analyse experte hors ligne")
+        subtitle = QLabel("Polygraphie ventilatoire — lecture OCR & analyse experte hors ligne", objectName="heroSubtitle")
         subtitle.setContentsMargins(12, 0, 0, 0)
         hero_layout.addWidget(title)
         hero_layout.addWidget(subtitle, stretch=1)
@@ -167,14 +168,14 @@ class MainWindow(QMainWindow):
             "courrier": "Courrier MT",
         }
         for doc in DOCS:
-            if doc in ("memo", "alertes"):
-                edit = QTextBrowser()
-                edit.setOpenExternalLinks(False)
-            else:
-                edit = QPlainTextEdit()
-                edit.setReadOnly(True)
+            edit = QTextBrowser()
+            edit.setOpenExternalLinks(False)
             self.editors[doc] = edit
             self.tabs.addTab(edit, titles[doc])
+        guide = QTextBrowser()
+        guide.setOpenExternalLinks(True)
+        guide.setHtml(guide_html())
+        self.tabs.addTab(guide, "Guide d'interprétation")
         layout.addWidget(self.tabs, stretch=1)
 
         self.status = QStatusBar()
@@ -351,7 +352,7 @@ class MainWindow(QMainWindow):
             elif doc == "alertes":
                 self.editors[doc].setHtml(alertes_html(self.data, self.result, ctx))
             else:
-                self.editors[doc].setPlainText(render(doc, self.data, self.result, ctx))
+                self.editors[doc].setHtml(text_to_html(render(doc, self.data, self.result, ctx)))
         self.status.showMessage(
             f"Examen chargé ({self.data.methode_extraction}) — {self.data.patient or 'patient inconnu'}"
         )

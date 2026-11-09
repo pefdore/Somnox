@@ -162,6 +162,20 @@ def parse_text(text: str, source: str = "", methode: str = "") -> PolygraphData:
     d.qualite_enregistrement_pct = _first([rf"Qualit[ée] de l['’]enregistrement\s*\n?\s*{_NUM}\s*%"], text)
     d.efficacite_sommeil_pct = _first([rf"Est\. efficacit[ée] du sommeil\s*\n?\s*{_NUM}\s*%"], text)
 
+    # Stades (présents si analyse Nox Body Sleep exécutée)
+    nrem = _search(rf"NREM\s*\n\s*{_NUM}\s*min", text)
+    rem = _search(rf"(?<![A-Za-z])REM\s*\n\s*{_NUM}\s*min", text)
+    d.duree_nrem_min = nrem
+    d.duree_rem_min = rem
+    if nrem is not None and rem is not None:
+        d.temps_sommeil_estime_min = nrem + rem
+
+    # Valeurs pré-traitement dans les Indications (contrôle OAM/PPC)
+    m = re.search(r"pr[ée][\s-]*OAM\s*:[^\n]*?IAH\s*(\d+[.,]?\d*)[^\n]*?IDO\s*(\d+[.,]?\d*)", d.indications, re.IGNORECASE)
+    if m:
+        d.iah_pre_traitement = _f(m.group(1))
+        d.odi_pre_traitement = _f(m.group(2))
+
     d.position_dorsale_pct = _first([rf"Dorsale{_GAP}\d+[.,]?\d*\s*min{_GAP}{_NUM}\s*%", rf"Décubitus\s*dorsal[^0-9\n]*{_NUM}\s*%"], text)
 
     d.index_plm = _first([rf"Index\s+(?:PLM| mouvements\s+p[ée]riodiques)[^0-9\n]*{_NUM}", rf"\bPLMS?I?\b[^0-9\n]*{_NUM}"], text)
