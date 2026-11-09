@@ -248,15 +248,43 @@ def _phenotype(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResult) -
         )
         _vigilance(res, "à terme", "SAHOS REM : surveiller l'aggravation avec l'âge et la prise de poids ; réévaluer si symptômes.")
 
-    # Suspicion d'hypoventilation / SOH
-    if (
-        data.imc is not None and data.imc >= 30
-        and ((data.t90 or 0) >= 5 or (data.spo2_moyenne or 100) < 92)
-    ):
-        _alerte(res, "attention", "Suspicion de syndrome d'obésité-hypoventilation (SOH)",
-                "Obésité avec hypoxémie nocturne : rechercher une hypoventilation alvéolaire "
-                "(gaz du sang diurnes, bicarbonates).")
+    # Suspicion d'hypoventilation / SOH — situations à risque
+    imc = data.imc
+    hypoxemie = (data.t90 or 0) >= 5 or (data.spo2_moyenne or 100) < 93 or (data.spo2_minimale or 100) < 85 or (data.charge_hypoxique or 0) >= 50
+    facteurs_soh = []
+    if imc is not None and imc >= 35:
+        facteurs_soh.append(f"obésité sévère (IMC {imc:g})")
+    elif imc is not None and imc >= 30:
+        facteurs_soh.append(f"obésité (IMC {imc:g})")
+    if (data.t90 or 0) >= 5:
+        facteurs_soh.append(f"T90 {data.t90:g} %")
+    if (data.spo2_moyenne or 100) < 93:
+        facteurs_soh.append(f"SpO2 moyenne {data.spo2_moyenne:g} %")
+    if (data.spo2_minimale or 100) < 85:
+        facteurs_soh.append(f"SpO2 minimale {data.spo2_minimale:g} %")
+    if (data.charge_hypoxique or 0) >= 50:
+        facteurs_soh.append(f"charge hypoxique {data.charge_hypoxique:g} %·min/h")
+    if ctx.cephees_matinales and imc is not None and imc >= 30:
+        facteurs_soh.append("céphalées matinales")
+    if "HTA" in ctx.comorbidites or "insuffisance cardiaque" in ctx.comorbidites:
+        facteurs_soh.append("comorbidité cardio-métabolique")
+
+    if imc is not None and imc >= 30 and hypoxemie:
+        _alerte(res, "critique" if (imc >= 35 and (data.t90 or 0) >= 10 or (data.spo2_moyenne or 100) < 90) else "attention",
+                "Suspicion de syndrome d'obésité-hypoventilation (SOH)",
+                "Facteurs de risque présents : " + ", ".join(facteurs_soh)
+                + ". Rechercher une hypoventilation alvéolaire : gaz du sang diurnes (PaCO2 ≥ 45 mmHg), "
+                "bicarbonates élevés. Si SOH confirmé : PPC à mode alvéolaire, pas de mode simple.")
         res.bilan_complementaire.append("Gaz du sang diurnes + bicarbonates : éliminer un syndrome d'obésité-hypoventilation (PPC à mode alvéolaire si confirmé).")
+    elif imc is not None and imc >= 35:
+        _alerte(res, "attention", "Risque de SOH à dépister",
+                f"Obésité sévère (IMC {imc:g}) : dépistage d'un SOH recommandé (gaz du sang diurnes, "
+                "bicarbonates), même si l'oxymétrie nocturne paraît peu altérée.")
+        res.bilan_complementaire.append("Obésité sévère : gaz du sang diurnes (dépistage SOH).")
+    elif facteurs_soh and (data.t90 or 0) >= 10:
+        _vigilance(res, "à terme",
+                   "Hypoxémie nocturne marquée sans obésité documentée : vérifier l'IMC/poids et "
+                   "rechercher une cause d'hypoxémie (BPCO, hypoventilation).")
 
     # PLM
     if data.index_plm is not None and data.index_plm >= 15:
@@ -490,6 +518,28 @@ def _comparaison_traitement(data: PolygraphData, ctx: ClinicalContext, res: Anal
             res.interpretation.append(f"T90 {data.t90_pre_traitement:g} → {data.t90:g} %.")
         if data.spo2_min_pre_traitement is not None and data.spo2_minimale is not None:
             res.interpretation.append(f"SpO2 minimale {data.spo2_min_pre_traitement:g} → {data.spo2_minimale:g} %.")
+        if data.charge_hypoxique_pre_traitement is not None and data.charge_hypoxique is not None:
+            res.interpretation.append(f"Charge hypoxique {data.charge_hypoxique_pre_traitement:g} → {data.charge_hypoxique:g} %·min/h.")
+
+        # Critères d'efficacité OAM : réduction ≥ 50 % de l'IAH ET IAH résiduel < 15/h
+        # (efficacité complète si IAH résiduel < 10/h — référentiels SFRMS).
+        if ctx.type_examen == "controle_oam" and data.iah is not None and data.iah_pre_traitement:
+            reduction = (data.iah_pre_traitement - data.iah) / data.iah_pre_traitement * 100
+            if reduction >= 50 and data.iah < 10:
+                res.interpretation.append(
+                    f"Critère d'efficacité OAM rempli (réduction de {reduction:.0f} %, IAH résiduel "
+                    f"{data.iah:g}/h < 10/h) : efficacité complète."
+                )
+            elif reduction >= 50 and data.iah < SEUIL_MODERES:
+                res.interpretation.append(
+                    f"Critère d'efficacité OAM rempli (réduction de {reduction:.0f} %, IAH résiduel "
+                    f"{data.iah:g}/h < 15/h) : efficacité satisfaisante."
+                )
+            else:
+                res.interpretation.append(
+                    f"Critère d'efficacité OAM non rempli (réduction de {reduction:.0f} %, "
+                    f"IAH résiduel {data.iah:g}/h — cible : réduction ≥ 50 % et IAH < 15/h)."
+                )
         if abs(variation) < 25:
             _vigilance(res, "immédiat",
                        f"Variation d'IAH faible sous traitement ({variation:+.0f} %) : vérifier "

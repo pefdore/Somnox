@@ -67,6 +67,7 @@ class PolygraphData:
     odi_pre_traitement: Optional[float] = None
     t90_pre_traitement: Optional[float] = None
     spo2_min_pre_traitement: Optional[float] = None
+    charge_hypoxique_pre_traitement: Optional[float] = None
     duree_rem_min: Optional[float] = None
     duree_nrem_min: Optional[float] = None
     boss: Optional[int] = None

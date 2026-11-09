@@ -135,8 +135,37 @@ GUIDE_HTML = f"""
 <li style='{_LI}'>L'index d'AA ne remplace pas l'EEG : il <b>surestime ou sous-estime</b> les micro-éveils réels ; c'est un marqueur de retentissement, pas un critère diagnostique.</li>
 </ul>
 </div>
-"""
+<div style='{_CARD}'>
+<h3 style='color:{_DARK};margin:2px 0 6px 0;'>&#128269; SHRVAS — Syndrome de haute r&eacute;sistance des voies a&eacute;riennes sup&eacute;rieures</h3>
+<p style='margin:4px 0;'><b>D&eacute;finition</b> : &eacute;v&eacute;nements respiratoires ne remplissant pas les crit&egrave;res AASM d'apn&eacute;e/hypopn&eacute;e (d&eacute;bit diminu&eacute; de &lt; 30 %), mais avec une <b>augmentation progressive des pressions n&eacute;gatives intrathoraciques</b> (efforts croissants) termin&eacute;e par un micro-&eacute;veil. L'IAH reste <b>normal ou peu &eacute;lev&eacute;</b> alors que le sommeil est fragment&eacute;.</p>
+<p style='margin:4px 0;'><b>Sur le rapport Noxturnal, chercher</b> :</p>
+<ul style='margin:4px 0;'>
+<li style='{_LI}'><b>Cycles de respiration limit&eacute;e &eacute;lev&eacute;s</b> (&ge; 10 % de la nuit) : aplatissement du d&eacute;bit inspiratoire.</li>
+<li style='{_LI}'><b>Activations autonomiques &eacute;lev&eacute;es</b> (&gt; 30/h) avec IAH normal : traceur indirect de la fragmentation.</li>
+<li style='{_LI}'><b>Ronflements</b> marqu&eacute;s (volume audio &eacute;lev&eacute;) avec index de ronflements uniques &eacute;lev&eacute;.</li>
+</ul>
+<p style='margin:4px 0;'><b>Tableau clinique typique</b> : patiente plut&ocirc;t jeune, IMC normal ou peu &eacute;lev&eacute;, somnolence diurne marqu&eacute;e, fatigue, ronflements, parfois cephal&eacute;es ; sans les comorbidit&eacute;s du SAHOS classique.</p>
+<p style='margin:4px 0;'><b>Conduite &agrave; tenir</b> :</p>
+<ul style='margin:4px 0;'>
+<li style='{_LI}'>Somnolence + IAH &lt; 5/h (ou discordance sympt&ocirc;mes/IAH) &rarr; <b>polysomnographie</b> avec index de micro-&eacute;veils (&eacute;ventuellement avec mesure des pressions &oelig;sophagiennes dans les centres &eacute;quip&eacute;s) pour objectiver la fragmentation.</li>
+<li style='{_LI}'>Pas de crit&egrave;re de remboursement sp&eacute;cifique (IAH &lt; 15/h) : prise en charge sur argument clinique &mdash; OAM ou PPC hors LPP, hygi&egrave;ne de sommeil, perte de poids si surpoids.</li>
+<li style='{_LI}'>Somnox signale le SHRVAS dans les diagnostics diff&eacute;rentiels d&egrave;s que : respiration limit&eacute;e &ge; 10 % OU AA &eacute;lev&eacute;es OU somnolence avec IAH normal.</li>
+</ul>
+</div>
 
+<div style='{_CARD}'>
+<h3 style='color:{_DARK};margin:2px 0 6px 0;'>&#129514; SOH — Syndrome d'ob&eacute;sit&eacute;-hypoventilation : situations &agrave; risque</h3>
+<p style='margin:4px 0;'><b>D&eacute;finition</b> : hypoventilation alv&eacute;olaire chronique chez un patient ob&egrave;se &mdash; <b>PaCO2 diurne &ge; 45 mmHg</b> (ou bicarbonates &eacute;lev&eacute;s), apr&egrave;s avoir &eacute;limin&eacute; les autres causes d'hypoventilation.</p>
+<p style='margin:4px 0;'><b>Situations qui doivent d&eacute;clencher le d&eacute;pistage</b> (Somnox g&eacute;n&egrave;re une alerte si elles sont pr&eacute;sentes) :</p>
+<ul style='margin:4px 0;'>
+<li style='{_LI}'><b>Ob&eacute;sit&eacute; s&eacute;v&egrave;re (IMC &ge; 35)</b> &rarr; d&eacute;pistage m&ecirc;me si l'oxym&eacute;trie para&icirc;t peu alt&eacute;r&eacute;e.</li>
+<li style='{_LI}'><b>Ob&eacute;sit&eacute; (IMC &ge; 30) + T90 &ge; 5 %</b>, ou SpO2 moyenne &lt; 93 %, ou SpO2 minimale &lt; 85 %, ou charge hypoxique &ge; 50 %&middot;min/h.</li>
+<li style='{_LI}'><b>C&eacute;phal&eacute;es matinales + ob&eacute;sit&eacute;</b> (signe d'hypercapnie nocturne).</li>
+<li style='{_LI}'><b>Alerte critique</b> si IMC &ge; 35 avec T90 &ge; 10 % ou SpO2 moyenne &lt; 90 %.</li>
+</ul>
+<p style='margin:4px 0;'><b>Conduite &agrave; tenir</b> : <b>gaz du sang diurnes + bicarbonates</b>. Si SOH confirm&eacute; : <b>PPC &agrave; mode alv&eacute;olaire</b> (pression t&eacute;lescopique / average volume assured pressure), pas de PPC simple ; avis sp&eacute;cialis&eacute; ; prise en charge nutritionnelle associ&eacute;e.</p>
+</div>
+"""
 
 def guide_html() -> str:
     return GUIDE_HTML

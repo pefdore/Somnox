@@ -119,6 +119,10 @@ def _parse_suivi_oam(indications: str, ctx: ClinicalContext, data: PolygraphData
     if m:
         data.spo2_min_pre_traitement = float(m.group(1))
 
+    m = re.search(r"M[ée]trique Initiale\s*:.*?CH\s*:\s*(\d{1,3}[.,]?\d*)\s*%\s*?min", indications, re.IGNORECASE)
+    if m:
+        data.charge_hypoxique_pre_traitement = float(m.group(1).replace(",", "."))
+
     # Décision
     m = re.search(r"Efficacit[ée] clinique\s*\[?(compl[èe]te|partielle|nulle)", indications, re.IGNORECASE)
     if m:
