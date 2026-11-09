@@ -90,3 +90,24 @@ def test_observance_dans_suivi_ppc():
     d = _data(iah=35.0)
     r = analyse(d, ClinicalContext(comorbidites=["HTA"]))
     assert any("observance" in s.lower() for s in r.suivi)
+
+
+def test_charge_hypoxique_elevee():
+    d = _data(charge_hypoxique=75.0)
+    r = analyse(d)
+    assert "Charge hypoxique élevée" in _titres(r)
+
+
+def test_charge_hypoxique_notable():
+    d = _data(charge_hypoxique=25.0)
+    r = analyse(d)
+    assert any("Charge hypoxique" in i for i in r.interpretation)
+
+
+def test_cycles_respiration_limitee_shvas():
+    from somnox.models import ClinicalContext
+
+    d = _data(iah=6.0, index_desat=6, cycles_respiration_limitee_pct=15.0)
+    r = analyse(d, ClinicalContext(somnolence=True, epworth=13))
+    assert any("respiration limitée" in i for i in r.interpretation)
+    assert any("SHVAS" in x for x in r.diagnostics_differentiels)

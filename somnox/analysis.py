@@ -273,6 +273,32 @@ def _phenotype(data: PolygraphData, ctx: ClinicalContext, res: AnalysisResult) -
             "fragmentation importante du sommeil."
         )
 
+    # Charge hypoxique (hypoxic burden, %·min/h)
+    if data.charge_hypoxique is not None:
+        if data.charge_hypoxique >= 50:
+            _alerte(res, "attention", "Charge hypoxique élevée",
+                    f"Charge hypoxique à {data.charge_hypoxique:g} %·min/h : exposition hypoxique "
+                    "cumulée importante, associée à un risque cardiovasculaire accru (HTA, ACFA) "
+                    "indépendamment de l'IAH seul.")
+        elif data.charge_hypoxique >= 20:
+            res.interpretation.append(
+                f"Charge hypoxique à {data.charge_hypoxique:g} %·min/h : charge hypoxique "
+                "notable à prendre en compte dans l'évaluation du retentissement."
+            )
+
+    # Cycles de respiration limitée (obstructif, effort maintenu)
+    if data.cycles_respiration_limitee_pct is not None and data.cycles_respiration_limitee_pct >= 10:
+        res.interpretation.append(
+            f"Cycles de respiration limitée : {data.cycles_respiration_limitee_pct:g} % de la nuit : "
+            "limitation de débit inspiratoire fréquente (phénomène obstructif, effort maintenu) — "
+            "à distinguer de la respiration de Cheyne-Stokes (origine centrale, sans effort)."
+        )
+        if ctx.somnolence_positive and (data.iah or 0) < SEUIL_MODERES:
+            res.diagnostics_differentiels.append(
+                "Respiration limitée fréquente avec somnolence et IAH peu élevé : évoquer un syndrome "
+                "de haute résistance des voies aériennes supérieures (SHVAS) — polysomnographie à discuter."
+            )
+
 
 # ------------------------------------------------ retentissement cardiovasculaire
 

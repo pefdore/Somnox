@@ -57,6 +57,7 @@ class PolygraphData:
     fc_minimale: Optional[float] = None
     t85: Optional[float] = None
     cheyne_stokes_min: Optional[float] = None
+    cycles_respiration_limitee_pct: Optional[float] = None
     qualite_enregistrement_pct: Optional[float] = None
     efficacite_sommeil_pct: Optional[float] = None
 
